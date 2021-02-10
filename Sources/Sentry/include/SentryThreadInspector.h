@@ -13,6 +13,12 @@ SENTRY_NO_INIT
        andMachineContextWrapper:(id<SentryCrashMachineContextWrapper>)machineContextWrapper;
 
 /**
+ * Returns the current thread with the according stacktrace. Frames from the SentrySDK are not
+ * included. For more details checkout SentryStacktraceBuilder.
+ */
+- (SentryThread *)getCurrentThread;
+
+/**
  * Gets current threads with the stacktrace only for the current thread. Frames from the SentrySDK
  * are not included. For more details checkout SentryStacktraceBuilder.
  */

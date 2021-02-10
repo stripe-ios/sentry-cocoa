@@ -24,6 +24,21 @@ SentryThreadInspector ()
     return self;
 }
 
+- (SentryThread *)getCurrentThread
+{
+    SentryCrashMC_NEW_CONTEXT(context);
+    [self.machineContextWrapper fillContextForCurrentThread:context];
+
+    SentryCrashThread thread = sentrycrashthread_self();
+    SentryThread *sentryThread = [[SentryThread alloc] initWithThreadId:@(thread)];
+    sentryThread.name = [self getThreadName:thread];
+    sentryThread.crashed = @NO;
+    sentryThread.current = @YES;
+    sentryThread.stacktrace = [self.stacktraceBuilder buildStacktraceForCurrentThread];
+
+    return sentryThread;
+}
+
 - (NSArray<SentryThread *> *)getCurrentThreads
 {
     NSMutableArray<SentryThread *> *threads = [NSMutableArray new];

@@ -168,12 +168,16 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
 - (SentryEvent *)buildErrorEvent:(NSError *)error
 {
     SentryEvent *event = [[SentryEvent alloc] initWithLevel:kSentryLevelError];
-    NSString *formatted = [NSString stringWithFormat:@"%@ %ld", error.domain, (long)error.code];
-    SentryMessage *message = [[SentryMessage alloc] initWithFormatted:formatted];
-    message.message = [error.domain stringByAppendingString:@" %s"];
-    message.params = @[ [NSString stringWithFormat:@"%ld", (long)error.code] ];
-    event.message = message;
+    NSString *errorCodeAsString = [NSString stringWithFormat:@"%ld", (long)error.code];
+    SentryException *sentryException = [[SentryException alloc] initWithValue:errorCodeAsString
+                                                                         type:error.domain];
+
+    sentryException.thread = [self.threadInspector getCurrentThread];
+    event.exceptions = @[ sentryException ];
+    event.fingerprint = @[ error.domain, [NSString stringWithFormat:@"%ld", (long)error.code] ];
+
     [self setUserInfo:error.userInfo withEvent:event];
+
     return event;
 }
 
@@ -377,7 +381,16 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
     }
 
     BOOL threadsNotAttached = !(nil != event.threads && event.threads.count > 0);
-    if (!isCrashEvent && shouldAttachStacktrace && threadsNotAttached) {
+    NSPredicate *noStacktracePredicate =
+        [NSPredicate predicateWithBlock:^BOOL(id object, NSDictionary *bindings) {
+            SentryException *exception = object;
+            return nil != exception.thread;
+        }];
+    BOOL exceptionsContainNoStacktraces = !(nil != event.exceptions && event.exceptions.count > 0 &&
+        [event.exceptions filteredArrayUsingPredicate:noStacktracePredicate].count > 0);
+    
+    if (!isCrashEvent && shouldAttachStacktrace && threadsNotAttached
+        && exceptionsContainNoStacktraces) {
         event.threads = [self.threadInspector getCurrentThreads];
     }
 

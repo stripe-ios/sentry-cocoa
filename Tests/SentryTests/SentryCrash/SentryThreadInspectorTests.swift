@@ -24,6 +24,19 @@ class SentryThreadInspectorTests: XCTestCase {
         fixture = Fixture()
     }
     
+    func testGetCurrentThread() {
+        let threadName = "thread.name123"
+        fixture.testMachineContextWrapper.threadName = threadName
+        
+        let actual = fixture.getSut().getCurrentThread()
+        
+        XCTAssertEqual(true, actual.current)
+        XCTAssertEqual(false, actual.crashed)
+        XCTAssertEqual(threadName, actual.name)
+        // The stacktrace has usually more than 40 frames. Feel free to change the number if the tests are failing
+        XCTAssertTrue(30 < actual.stacktrace?.frames.count ?? 0, "Not enough stacktrace frames.")
+    }
+    
     func testNoThreads() {
         let actual = fixture.getSut().getCurrentThreads()
         XCTAssertEqual(0, actual.count)

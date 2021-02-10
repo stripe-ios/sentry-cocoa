@@ -17,6 +17,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             options.sessionTrackingIntervalMillis = 5_000
         }
         
+        do {
+            try RandomErrorGenerator.generate()
+        } catch {
+            SentrySDK.capture(error: error) { (scope) in
+                // Changes in here will only be captured for this event
+                // The scope in this callback is a clone of the current scope
+                // It contains all data but mutations only influence the event being sent
+                scope.setTag(value: "value", key: "myTag")
+            }
+        }
+        
         return true
     }
 
