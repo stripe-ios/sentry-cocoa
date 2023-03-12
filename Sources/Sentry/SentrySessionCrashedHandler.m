@@ -1,34 +1,36 @@
 #import "SentrySessionCrashedHandler.h"
 #import "SentryClient+Private.h"
-#import "SentryClient.h"
-#import "SentryCrashAdapter.h"
+#import "SentryCrashWrapper.h"
 #import "SentryCurrentDate.h"
-#import "SentryDispatchQueueWrapper.h"
 #import "SentryFileManager.h"
 #import "SentryHub.h"
-#import "SentrySDK.h"
-#import "SentrySession.h"
+#import "SentrySDK+Private.h"
+#import "SentryWatchdogTerminationLogic.h"
 
 @interface
 SentrySessionCrashedHandler ()
 
-@property (nonatomic, strong) SentryCrashAdapter *crashWrapper;
+@property (nonatomic, strong) SentryCrashWrapper *crashWrapper;
+@property (nonatomic, strong) SentryWatchdogTerminationLogic *watchdogTerminationLogic;
 
 @end
 
 @implementation SentrySessionCrashedHandler
 
-- (instancetype)initWithCrashWrapper:(SentryCrashAdapter *)crashWrapper
+- (instancetype)initWithCrashWrapper:(SentryCrashWrapper *)crashWrapper
+            watchdogTerminationLogic:(SentryWatchdogTerminationLogic *)watchdogTerminationLogic;
 {
     self = [self init];
     self.crashWrapper = crashWrapper;
+    self.watchdogTerminationLogic = watchdogTerminationLogic;
 
     return self;
 }
 
-- (void)endCurrentSessionAsCrashedWhenCrashed
+- (void)endCurrentSessionAsCrashedWhenCrashOrOOM
 {
-    if (self.crashWrapper.crashedLastLaunch) {
+    if (self.crashWrapper.crashedLastLaunch ||
+        [self.watchdogTerminationLogic isWatchdogTermination]) {
         SentryFileManager *fileManager = [[[SentrySDK currentHub] getClient] fileManager];
 
         if (nil == fileManager) {

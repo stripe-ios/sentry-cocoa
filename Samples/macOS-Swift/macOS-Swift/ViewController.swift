@@ -3,26 +3,14 @@ import Sentry
 
 class ViewController: NSViewController {
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        // Do any additional setup after loading the view.
-    }
-
-    override var representedObject: Any? {
-        didSet {
-        // Update the view, if already loaded.
-        }
-    }
-    
     @IBAction func addBreadCrumb(_ sender: Any) {
         let crumb = Breadcrumb(level: SentryLevel.info, category: "Debug")
         crumb.message = "tapped addBreadcrumb"
         crumb.type = "user"
-        SentrySDK.addBreadcrumb(crumb: crumb)
+        SentrySDK.addBreadcrumb(crumb)
     }
     
-    @IBAction func captureMessage(_ sender: Any) {
+    @IBAction func captureMessage(_ sender: Any) {    
         let eventId = SentrySDK.capture(message: "Yeah captured a message")
         // Returns eventId in case of successfull processed event
         // otherwise nil
@@ -49,7 +37,37 @@ class ViewController: NSViewController {
         NSApp.perform("_crashOnException:", with: exception)
     }
     
+    @IBAction func captureTransaction(_ sender: Any) {
+        let transaction = SentrySDK.startTransaction(name: "Some Transaction", operation: "some operation")
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.4...0.6), execute: {
+            transaction.finish()
+        })
+    }
+    
     @IBAction func sentryCrash(_ sender: Any) {
         SentrySDK.crash()
+    }
+    
+    @IBAction func cppException(_ sender: Any) {
+        let wrapper = CppWrapper()
+        wrapper.throwCPPException()
+    }
+    
+    @IBAction func asyncCrash(_ sender: Any) {
+        DispatchQueue.main.async {
+            self.asyncCrash1()
+        }
+    }
+    
+    func asyncCrash1() {
+        DispatchQueue.main.async {
+            self.asyncCrash2()
+        }
+    }
+    
+    func asyncCrash2() {
+        DispatchQueue.main.async {
+            SentrySDK.crash()
+        }
     }
 }

@@ -1,4 +1,7 @@
-import Foundation
+#if os(iOS) || os(tvOS) || targetEnvironment(macCatalyst)
+import Sentry
+import UIKit
+#endif
 
 class TestData {
     
@@ -9,7 +12,7 @@ class TestData {
         }
     }
     static let sdk = ["name": SentryMeta.sdkName, "version": SentryMeta.versionString]
-    static let context = ["context": ["c": "a"]]
+    static let context = ["context": ["c": "a", "date": timestamp]]
     
     static var crumb: Breadcrumb {
         let crumb = Breadcrumb()
@@ -47,6 +50,7 @@ class TestData {
         event.transaction = "transaction"
         event.type = "type"
         event.user = user
+        event.request = request
         
         return event
     }
@@ -56,6 +60,7 @@ class TestData {
         user.email = "user@sentry.io"
         user.username = "user123"
         user.ipAddress = "127.0.0.1"
+        user.segment = "segmentA"
         user.data = ["some": ["data": "data", "date": timestamp]]
         
         return user
@@ -67,8 +72,10 @@ class TestData {
         debugMeta.imageSize = 352_256
         debugMeta.imageVmAddress = "0x00007fff51af0000"
         debugMeta.name = "/tmp/scratch/dyld_sim"
-        debugMeta.type = "apple"
+        debugMeta.codeFile = "/tmp/scratch/dyld_sim"
+        debugMeta.type = "macho"
         debugMeta.uuid = "84BAEBDA-AD1A-33F4-B35D-8A45F5DAF322"
+        debugMeta.debugID = "84BAEBDA-AD1A-33F4-B35D-8A45F5DAF321"
         
         return debugMeta
     }
@@ -77,7 +84,8 @@ class TestData {
         let exception = Exception(value: "value", type: "type")
         exception.mechanism = mechanism
         exception.module = "module"
-        exception.thread = thread
+        exception.threadId = thread.threadId
+        exception.stacktrace = thread.stacktrace
         
         return exception
     }
@@ -88,31 +96,67 @@ class TestData {
         mechanism.data = ["something": ["date": currentDateProvider.date()]]
         mechanism.desc = "desc"
         mechanism.handled = true
+        mechanism.synthetic = false
         mechanism.helpLink = "https://www.sentry.io"
-        mechanism.meta = ["meta": "data"]
-        
-        let error = SampleError.bestDeveloper as NSError
-        mechanism.error = SentryNSError(domain: error.domain, code: error.code)
+        mechanism.meta = mechanismMeta
         
         return mechanism
     }
     
-    static var thread: Sentry.Thread {
-        let thread = Sentry.Thread(threadId: 10)
+    static var mechanismMeta: MechanismMeta {
+        let mechanismMeta = MechanismMeta()
+        mechanismMeta.machException = [
+            "name": "EXC_BAD_ACCESS",
+            "exception": 1,
+            "subcode": 8,
+            "code": 0
+        ]
+        mechanismMeta.signal = [
+            "number": 10,
+            "code": 0,
+            "name": "SIGBUS",
+            "code_name": "BUS_NOOP"
+        ]
+        
+        mechanismMeta.error = SentryNSError(domain: "SentrySampleDomain", code: 1)
+        
+        return mechanismMeta
+    }
+    
+    static var thread: SentryThread {
+        let thread = SentryThread(threadId: 10)
         thread.crashed = false
         thread.current = true
         thread.name = "main"
         thread.stacktrace = stacktrace
+        thread.isMain = true
         
         return thread
     }
+
+    static var thread2: SentryThread {
+        let thread = SentryThread(threadId: 0)
+        thread.crashed = false
+        thread.current = true
+        thread.name = "main"
+        thread.stacktrace = stacktrace2
+
+        return thread
+    }
     
-    static var stacktrace: Stacktrace {
-        let stacktrace = Stacktrace(frames: [frame], registers: ["register": "one"])
+    static var stacktrace: SentryStacktrace {
+        let stacktrace = SentryStacktrace(frames: [mainFrame], registers: ["register": "one"])
+        stacktrace.snapshot = true
+        return stacktrace
+    }
+
+    static var stacktrace2: SentryStacktrace {
+        let stacktrace = SentryStacktrace(frames: [mainFrame, testFrame], registers: ["register": "one"])
+        stacktrace.snapshot = true
         return stacktrace
     }
     
-    static var frame: Frame {
+    static var mainFrame: Frame {
         let frame = Frame()
         frame.columnNumber = 1
         frame.fileName = "fileName"
@@ -122,11 +166,54 @@ class TestData {
         frame.instructionAddress = "0x000000008fd09c40"
         frame.lineNumber = 207
         frame.module = "module"
-        frame.package = "sentry"
+        frame.package = "sentrytest"
         frame.platform = "iOS"
         frame.symbolAddress = "0x000000008e902bf0"
+        frame.stackStart = true
         
         return frame
+    }
+
+    static var testFrame: Frame {
+        let frame = Frame()
+        frame.columnNumber = 1
+        frame.fileName = "testFile"
+        frame.function = "test"
+        frame.imageAddress = "0x0000000105705000"
+        frame.inApp = true
+        frame.instructionAddress = "0x000000008fd09c90"
+        frame.lineNumber = 107
+        frame.module = "module"
+        frame.package = "sentrytest"
+        frame.platform = "iOS"
+        frame.symbolAddress = "0x000000008e902b97"
+        frame.stackStart = false
+        return frame
+    }
+
+    static var outsideFrame: Frame {
+        let frame = Frame()
+        frame.columnNumber = 1
+        frame.fileName = "helperFile"
+        frame.function = "helper"
+        frame.imageAddress = "0x0000000105709000"
+        frame.inApp = false
+        frame.instructionAddress = "0x000000008fd09a40"
+        frame.lineNumber = 307
+        frame.module = "outsideModule"
+        frame.package = "ThirdPartyLib"
+        frame.platform = "iOS"
+        frame.symbolAddress = "0x000000008e902e51"
+        frame.stackStart = false
+        return frame
+    }
+
+    static var debugImage: DebugMeta {
+        let image = DebugMeta()
+        image.name = "sentrytest"
+        image.imageAddress = "0x0000000105705000"
+        image.imageVmAddress = "0x0000000105705000"
+        return image
     }
     
     static var fileAttachment: Attachment {
@@ -141,5 +228,88 @@ class TestData {
         case bestDeveloper
         case happyCustomer
         case awesomeCentaur
+    }
+    
+    static var someUUID = "12345678-1234-1234-1234-12344567890AB"
+    
+    static var appState: SentryAppState {
+        return SentryAppState(releaseName: "1.0.0", osVersion: "14.4.1", vendorId: someUUID, isDebugging: false, systemBootTimestamp: timestamp)
+    }
+    
+    static var oomEvent: Event {
+        let event = Event(level: SentryLevel.fatal)
+        let exception = Exception(value: SentryWatchdogTerminationExceptionValue, type: SentryWatchdogTerminationExceptionType)
+        exception.mechanism = Mechanism(type: SentryWatchdogTerminationMechanismType)
+        event.exceptions = [exception]
+        return event
+    }
+    
+    static var metricKitEvent: Event {
+        let event = Event(level: .warning)
+        let exception = Exception(value: "MXCPUException totalCPUTime:90.009 sec totalSampledTime:91.952 sec", type: SentryMetricKitCpuExceptionType)
+        exception.mechanism = Mechanism(type: SentryMetricKitCpuExceptionMechanism)
+        event.exceptions = [exception]
+        return event
+    }
+    
+    static func scopeWith(observer: SentryScopeObserver) -> Scope {
+        let scope = Scope()
+        scope.add(observer)
+        
+        scope.setUser(TestData.user)
+        scope.setDist("dist")
+        setContext(scope)
+        scope.setEnvironment("Production")
+        
+        let tags = ["tag1": "tag1", "tag2": "tag2"]
+        scope.setTags(tags)
+        scope.setExtras(["extra1": "extra1", "extra2": "extra2"])
+        scope.setFingerprint(["finger", "print"])
+        
+        scope.setLevel(SentryLevel.fatal)
+        
+        let crumb1 = TestData.crumb
+        crumb1.message = "Crumb 1"
+        scope.addBreadcrumb(crumb1)
+        
+        let crumb2 = TestData.crumb
+        crumb2.message = "Crumb 2"
+        scope.addBreadcrumb(crumb2)
+        
+        return scope
+    }
+    
+    static var userFeedback: UserFeedback {
+        let userFeedback = UserFeedback(eventId: SentryId())
+        userFeedback.comments = "It doesn't really"
+        userFeedback.email = "john@me.com"
+        userFeedback.name = "John Me"
+        return userFeedback
+    }
+    
+    static func setContext(_ scope: Scope) {
+        scope.setContext(value: TestData.context["context"]!, key: "context")
+    }
+    
+    static var request: SentryRequest {
+        let request = SentryRequest()
+        request.url = "https://sentry.io"
+        request.fragment = "fragment"
+        request.bodySize = 10
+        request.queryString = "query"
+        request.cookies = "cookies"
+        request.method = "GET"
+        request.headers = ["header": "value"]
+        
+        return request
+    }
+    
+    static func getAppStartMeasurement(type: SentryAppStartType, appStartTimestamp: Date = TestData.timestamp) -> SentryAppStartMeasurement {
+        let appStartDuration = 0.5
+        let main = appStartTimestamp.addingTimeInterval(0.15)
+        let runtimeInit = appStartTimestamp.addingTimeInterval(0.05)
+        let didFinishLaunching = appStartTimestamp.addingTimeInterval(0.3)
+        
+        return SentryAppStartMeasurement(type: type, isPreWarmed: false, appStartTimestamp: appStartTimestamp, duration: appStartDuration, runtimeInitTimestamp: runtimeInit, moduleInitializationTimestamp: main, didFinishLaunchingTimestamp: didFinishLaunching)
     }
 }

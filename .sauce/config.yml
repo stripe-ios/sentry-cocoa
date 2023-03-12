@@ -1,0 +1,51 @@
+apiVersion: v1alpha
+kind: xcuitest
+sauce:
+  region: us-west-1
+  concurrency: 2
+
+defaults:
+  timeout: 20m
+
+xcuitest:
+  app: ./DerivedData/Build/Products/Debug-iphoneos/iOS-Swift.app
+  testApp: ./DerivedData/Build/Products/Debug-iphoneos/iOS-SwiftUITests-Runner.app
+
+suites:
+   
+  - name: "iOS-15"
+    devices:
+      - name: "iPhone.*"
+        platformVersion: "15.4"
+
+  - name: "iPhone-Pro"
+    devices:
+      - name: "iPhone 13 Pro.*"
+        platformVersion: "15"
+        
+  - name: "iOS-14"
+    devices:
+      - name: "iPhone.*"
+        platformVersion: "14.8"
+
+  - name: "iOS-13"
+    devices:
+      - name: "iPhone.*"
+        platformVersion: "13.7"
+
+  - name: "iOS-12"
+    devices:
+      - name: "iPhone.*"
+        platformVersion: "12.5.5"
+
+  - name: "iOS-11"
+    devices:
+      - name: "iPhone.*"
+        platformVersion: "11.4.1"
+      
+artifacts:
+  download:
+    when: always
+    match:
+      - "*.junit.xml"
+    directory: ./artifacts/

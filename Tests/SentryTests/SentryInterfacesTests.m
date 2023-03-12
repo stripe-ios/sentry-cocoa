@@ -14,31 +14,6 @@
 
 // TODO test event
 
-- (void)testDebugMeta
-{
-    SentryDebugMeta *debugMeta = [[SentryDebugMeta alloc] init];
-    debugMeta.uuid = @"abcd";
-    XCTAssertNotNil(debugMeta.uuid);
-    NSDictionary *serialized = @{ @"uuid" : @"abcd" };
-    XCTAssertEqualObjects([debugMeta serialize], serialized);
-
-    SentryDebugMeta *debugMeta2 = [[SentryDebugMeta alloc] init];
-    debugMeta2.uuid = @"abcde";
-    debugMeta2.imageAddress = @"0x0000000100034000";
-    debugMeta2.type = @"1";
-    debugMeta2.imageSize = @(4);
-    debugMeta2.name = @"name";
-    NSDictionary *serialized2 = @{
-        @"image_addr" : @"0x0000000100034000",
-        @"image_addr" : @"0x02",
-        @"image_size" : @(4),
-        @"type" : @"1",
-        @"name" : @"name",
-        @"uuid" : @"abcde"
-    };
-    XCTAssertEqualObjects([debugMeta2 serialize], serialized2);
-}
-
 - (void)testFrame
 {
     SentryFrame *frame = [[SentryFrame alloc] init];
@@ -91,7 +66,7 @@
         @"environment" : @"bla",
         @"platform" : @"cocoa",
         @"sdk" : @ { @"name" : @"sentry.cocoa", @"version" : SentryMeta.versionString },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event serialize], serialized);
 
@@ -103,7 +78,7 @@
         @"level" : @"info",
         @"platform" : @"cocoa",
         @"sdk" : @ { @"name" : @"sentry.cocoa", @"version" : SentryMeta.versionString },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event2 serialize], serialized2);
 
@@ -123,7 +98,7 @@
             @"version" : @"0.15.2",
             @"integrations" : @[ @"sentry.cocoa" ]
         },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event3 serialize], serialized3);
 
@@ -138,7 +113,7 @@
         @"level" : @"info",
         @"platform" : @"cocoa",
         @"sdk" : @ { @"name" : @"sentry.cocoa", @"version" : SentryMeta.versionString },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event4 serialize], serialized4);
 }
@@ -149,7 +124,6 @@
 
     SentryEvent *event = [[SentryEvent alloc] initWithLevel:kSentryLevelInfo];
     event.timestamp = date;
-    event.extra = @{ @"__sentry_transaction" : @"yoyoyo" };
     event.sdk = @{
         @"version" : @"0.15.2",
         @"name" : @"sentry-react-native",
@@ -158,15 +132,13 @@
     NSDictionary *serialized = @{
         @"event_id" : [event.eventId sentryIdString],
         @"level" : @"info",
-        @"extra" : @ {},
-        @"transaction" : @"yoyoyo",
         @"platform" : @"cocoa",
         @"sdk" : @ {
             @"name" : @"sentry-react-native",
             @"version" : @"0.15.2",
             @"integrations" : @[ @"sentry.cocoa" ]
         },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event serialize], serialized);
 
@@ -188,7 +160,7 @@
             @"version" : @"0.15.2",
             @"integrations" : @[ @"sentry.cocoa" ]
         },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event3 serialize], serialized3);
     SentryEvent *event4 = [[SentryEvent alloc] initWithLevel:kSentryLevelInfo];
@@ -224,7 +196,7 @@
         @"level" : @"info",
         @"platform" : @"cocoa",
         @"sdk" : @ { @"name" : @"sentry.cocoa", @"version" : SentryMeta.versionString },
-        @"timestamp" : [date sentry_toIso8601String]
+        @"timestamp" : @(date.timeIntervalSince1970)
     };
     XCTAssertEqualObjects([event4 serialize], serialized4);
 }
@@ -358,7 +330,9 @@
     thread2.stacktrace = [[SentryStacktrace alloc] initWithFrames:@[ frame ]
                                                         registers:@{ @"a" : @"1" }];
 
-    exception2.thread = thread2;
+    exception2.threadId = thread2.threadId;
+    exception2.stacktrace = thread2.stacktrace;
+
     exception2.mechanism = [[SentryMechanism alloc] initWithType:@"test"];
     exception2.module = @"module";
     NSDictionary *serialized2 = @{

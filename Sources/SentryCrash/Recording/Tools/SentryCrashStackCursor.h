@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 #include "SentryCrashMachineContext.h"
+#include "SentryHook.h"
 
 #include <stdbool.h>
 #include <sys/types.h>
@@ -40,31 +41,40 @@ extern "C" {
  */
 #define SentryCrashSC_STACK_OVERFLOW_THRESHOLD 150
 
+/** A special marker frame being yielded as `address` to denote a chained async stacktrace. */
+#define SentryCrashSC_ASYNC_MARKER (UINTPTR_MAX - 1234)
+
+typedef struct {
+    /** Current address in the stack trace. */
+    uintptr_t address;
+
+    /** The name (if any) of the binary image the current address falls
+     * inside. */
+    const char *imageName;
+
+    /** The starting address of the binary image the current address falls
+     * inside. */
+    uintptr_t imageAddress;
+
+    /** The name (if any) of the closest symbol to the current address. */
+    const char *symbolName;
+
+    /** The address of the closest symbol to the current address. */
+    uintptr_t symbolAddress;
+} SentryCrashStackEntry;
+
 typedef struct SentryCrashStackCursor {
-    struct {
-        /** Current address in the stack trace. */
-        uintptr_t address;
+    SentryCrashStackEntry stackEntry;
 
-        /** The name (if any) of the binary image the current address falls
-         * inside. */
-        const char *imageName;
-
-        /** The starting address of the binary image the current address falls
-         * inside. */
-        uintptr_t imageAddress;
-
-        /** The name (if any) of the closest symbol to the current address. */
-        const char *symbolName;
-
-        /** The address of the closest symbol to the current address. */
-        uintptr_t symbolAddress;
-    } stackEntry;
     struct {
         /** Current depth as we walk the stack (1-based). */
         int currentDepth;
 
         /** If true, cursor has given up walking the stack. */
         bool hasGivenUp;
+
+        /** The current async caller we are chaining to. */
+        sentrycrash_async_backtrace_t *current_async_caller;
     } state;
 
     /** Reset the cursor back to the beginning. */
@@ -76,6 +86,9 @@ typedef struct SentryCrashStackCursor {
     /** Attempt to symbolicate the current address, filling in the fields in
      * stackEntry. */
     bool (*symbolicate)(struct SentryCrashStackCursor *);
+
+    /** Pointer to an optional async stacktrace. */
+    sentrycrash_async_backtrace_t *async_caller;
 
     /** Internal context-specific information. */
     void *context[SentryCrashSC_CONTEXT_SIZE];
@@ -101,6 +114,15 @@ void sentrycrashsc_initCursor(SentryCrashStackCursor *cursor,
  * @param cursor The cursor to reset.
  */
 void sentrycrashsc_resetCursor(SentryCrashStackCursor *cursor);
+
+/** Chain the optional `async_caller` to the current `cursor`.
+ * In case of a valid `async_caller`, this will yield a special marker frame.
+ */
+bool sentrycrashsc_tryAsyncChain(
+    SentryCrashStackCursor *cursor, sentrycrash_async_backtrace_t *async_caller);
+
+/** Advance the cursor to the next stack entry in a chained async stacktrace. */
+bool sentrycrashsc_advanceAsyncCursor(SentryCrashStackCursor *cursor);
 
 #ifdef __cplusplus
 }

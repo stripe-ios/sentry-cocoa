@@ -1,7 +1,19 @@
+import Sentry
 import XCTest
 
 class SentryEventTests: XCTestCase {
 
+    func testInitWithLevel() {
+        let dateProvider = TestCurrentDateProvider()
+        CurrentDate.setCurrentDateProvider(dateProvider)
+        
+        let event = Event(level: .debug)
+        
+        XCTAssertEqual(event.platform, "cocoa")
+        XCTAssertEqual(event.level, .debug)
+        XCTAssertEqual(event.timestamp, dateProvider.date())
+    }
+    
     func testSerialize() {
         let event = TestData.event
         let actual = event.serialize()
@@ -13,7 +25,7 @@ class SentryEventTests: XCTestCase {
         event.context?["a"] = ["a": 0]
 
         XCTAssertEqual(event.eventId.sentryIdString, actual["event_id"] as? String)
-        XCTAssertEqual(TestData.timestampAs8601String, actual["timestamp"] as? String)
+        XCTAssertEqual(TestData.timestamp.timeIntervalSince1970, actual["timestamp"] as? TimeInterval)
         XCTAssertEqual("cocoa", actual["platform"] as? String)
         XCTAssertEqual("info", actual["level"] as? String)
 
@@ -29,14 +41,17 @@ class SentryEventTests: XCTestCase {
         XCTAssertNotNil(actual["user"] as? [String: Any])
         XCTAssertEqual(TestData.event.modules, actual["modules"] as? [String: String])
         XCTAssertNotNil(actual["stacktrace"] as? [String: Any])
+        XCTAssertNotNil(actual["request"] as? [String: Any])
         
         let crumbs = actual["breadcrumbs"] as? [[String: Any]]
         XCTAssertNotNil(crumbs)
         XCTAssertEqual(1, crumbs?.count)
         
         let context = actual["contexts"] as? [String: [String: Any]]
-        XCTAssertEqual(1, context?.count)
-        XCTAssertEqual(TestData.context["context"], context?["context"] as? [String: String])
+        XCTAssertEqual(context?.count, 1)
+        XCTAssertEqual(context?["context"]?.count, 2)
+        XCTAssertEqual(context?["context"]?["c"] as! String, "a")
+        XCTAssertEqual(context?["context"]?["date"] as! String, "1970-01-01T00:00:10.000Z")
         
         XCTAssertNotNil(actual["message"] as? [String: Any])
         
@@ -50,7 +65,7 @@ class SentryEventTests: XCTestCase {
         event.type = "transaction"
         
         let actual = event.serialize()
-        XCTAssertEqual(TestData.timestampAs8601String, actual["start_timestamp"] as? String)
+        XCTAssertEqual(TestData.timestamp.timeIntervalSince1970, actual["start_timestamp"] as? TimeInterval)
     }
     
     func testSerializeWithTypeTransaction_WithoutStartTimestamp() {
@@ -59,17 +74,8 @@ class SentryEventTests: XCTestCase {
         event.startTimestamp = nil
         
         let actual = event.serialize()
-        XCTAssertEqual(TestData.timestampAs8601String, actual["start_timestamp"] as? String)
-    }
-    
-    func testSerializeWithExtraTransaction() {
-        let event = TestData.event
-        event.transaction = nil
-        let sentryTransaction = "trans"
-        event.extra?["__sentry_transaction"] = sentryTransaction
-        
-        let actual = event.serialize()
-        XCTAssertEqual(sentryTransaction, actual["transaction"] as? String)
+        XCTAssertEqual(TestData.timestamp.timeIntervalSince1970, actual["start_timestamp"] as? TimeInterval
+        )
     }
     
     func testSerializeWithoutBreadcrumbs() {

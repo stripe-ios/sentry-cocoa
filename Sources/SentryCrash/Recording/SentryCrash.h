@@ -24,8 +24,6 @@
 // THE SOFTWARE.
 //
 
-#import <Foundation/Foundation.h>
-
 #import "SentryCrashMonitorType.h"
 #import "SentryCrashReportFilter.h"
 #import "SentryCrashReportWriter.h"
@@ -43,6 +41,10 @@ typedef enum {
     SentryCrashCDeleteAlways
 } SentryCrashCDeleteBehavior;
 
+static NSString *const SENTRYCRASH_REPORT_ATTACHMENTS_ITEM = @"attachments";
+
+@class SentryNSNotificationCenterWrapper;
+
 /**
  * Reports any crashes that occur in the application.
  *
@@ -55,6 +57,11 @@ typedef enum {
 
 /** Init SentryCrash instance with custom base path. */
 - (id)initWithBasePath:(NSString *)basePath;
+
+/** Optional, custom cache directory. Use when default one can not be accessed, e.g. in security
+ * environment. Default: null
+ */
+@property (nonatomic, readwrite, retain) NSString *basePath;
 
 /** A dictionary containing any info you'd like to appear in crash reports. Must
  * contain only JSON-safe data: NSString for keys, and NSDictionary, NSArray,
@@ -83,28 +90,11 @@ typedef enum {
  */
 @property (nonatomic, readwrite, assign) SentryCrashMonitorType monitoring;
 
-/** Maximum time to allow the main thread to run without returning.
- * If a task occupies the main thread for longer than this interval, the
- * watchdog will consider the queue deadlocked and shut down the app and write a
- * crash report.
- *
- * Note: You must have added SentryCrashMonitorTypeMainThreadDeadlock to the
- * monitoring property in order for this to have any effect.
- *
- * Warning: Make SURE that nothing in your app that runs on the main thread
- * takes longer to complete than this value or it WILL get shut down! This
- * includes your app startup process, so you may need to push app initialization
- * to another thread, or perhaps set this to a higher value until your
- * application has been fully initialized.
- *
- * WARNING: This is still causing false positives in some cases. Use at own
- * risk!
- *
- * 0 = Disabled.
- *
- * Default: 0
- */
-@property (nonatomic, readwrite, assign) double deadlockWatchdogInterval;
+// We removed searchQueueNames in 4.0.0 see:
+// https://github.com/getsentry/sentry-cocoa/commit/b728c74e898e6ed3b1cab0b1cf5b6c8892b29b70,
+// because we were deferencing a pointer to the dispatch queue, which could have been deallocated by
+// the time you deference it. Also see this comment in some WebKit code:
+// https://github.com/WebKit/WebKit/blob/09225dc168d445890bb0e2a5fa8bc19aef8556f2/Source/WebCore/page/cocoa/ResourceUsageThreadCocoa.mm#L119.
 
 /** If YES, introspect memory contents during a crash.
  * Any Objective-C objects or C strings near the stack pointer or referenced by
@@ -156,10 +146,6 @@ typedef enum {
  */
 @property (nonatomic, readwrite, assign) SentryCrashReportWriteCallback onCrash;
 
-/** Add a copy of SentryCrash's console log messages to the crash report.
- */
-@property (nonatomic, readwrite, assign) BOOL addConsoleLogToReport;
-
 /** Print the previous app run log to the console when installing SentryCrash.
  *  This is primarily for debugging purposes.
  */
@@ -172,11 +158,6 @@ typedef enum {
 /** Exposes the uncaughtExceptionHandler if set from SentryCrash. Is nil if
  * debugger is running. **/
 @property (nonatomic, assign) NSUncaughtExceptionHandler *uncaughtExceptionHandler;
-
-/** Exposes the currentSnapshotUserReportedExceptionHandler if set from
- * SentryCrash. Is nil if debugger is running. **/
-@property (nonatomic, assign)
-    NSUncaughtExceptionHandler *currentSnapshotUserReportedExceptionHandler;
 
 #pragma mark - Information -
 
@@ -224,6 +205,15 @@ typedef enum {
  */
 - (BOOL)install;
 
+/**
+ * It's not really possible to completely uninstall SentryCrash. The best we can do is to deactivate
+ * all the monitors, keep track of the already installed monitors to install them again if someone
+ * calls install, clear the `onCrash` callback, and stop the SentryCrashCachedData. For the
+ * ``SentryCrashMonitorTypeMachException`` we let the exception threads running, but they don't
+ * report anything.
+ */
+- (void)uninstall;
+
 /** Send all outstanding crash reports to the current sink.
  * It will only attempt to send the most recent 5 reports. All others will be
  * deleted. Once the reports are successfully sent to the server, they may be
@@ -261,37 +251,11 @@ typedef enum {
  */
 - (void)deleteReportWithID:(NSNumber *)reportID;
 
-/** Report a custom, user defined exception.
- * This can be useful when dealing with scripting languages.
- *
- * If terminateProgram is true, all sentries will be uninstalled and the
- * application will terminate with an abort().
- *
- * @param name The exception name (for namespacing exception types).
- *
- * @param reason A description of why the exception occurred.
- *
- * @param language A unique language identifier.
- *
- * @param lineOfCode A copy of the offending line of code (nil = ignore).
- *
- * @param stackTrace An array of frames (dictionaries or strings) representing
- * the call stack leading to the exception (nil = ignore).
- *
- * @param logAllThreads If true, suspend all threads and log their state. Note
- * that this incurs a performance penalty, so it's best to use only on fatal
- * errors.
- *
- * @param terminateProgram If true, do not return from this function call.
- * Terminate the program instead.
+/**
+ * Only needed for testing.
  */
-- (void)reportUserException:(NSString *)name
-                     reason:(NSString *)reason
-                   language:(NSString *)language
-                 lineOfCode:(NSString *)lineOfCode
-                 stackTrace:(NSArray *)stackTrace
-              logAllThreads:(BOOL)logAllThreads
-           terminateProgram:(BOOL)terminateProgram;
+- (void)setSentryNSNotificationCenterWrapper:
+    (SentryNSNotificationCenterWrapper *)notificationCenter;
 
 @end
 

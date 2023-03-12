@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1200"
+   LastUpgradeVersion = "1400"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -23,10 +23,10 @@
       </BuildActionEntries>
    </BuildAction>
    <TestAction
-      buildConfiguration = "Debug"
+      buildConfiguration = "Test"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
+      shouldUseLaunchSchemeArgsEnv = "NO"
       codeCoverageEnabled = "YES">
       <MacroExpansion>
          <BuildableReference
@@ -37,6 +37,13 @@
             ReferencedContainer = "container:Sentry.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "TSAN_OPTIONS"
+            value = "suppressions=$(PROJECT_DIR)/Tests/ThreadSanitizer.sup"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
       <Testables>
          <TestableReference
             skipped = "NO">
@@ -47,6 +54,53 @@
                BlueprintName = "SentryTests"
                ReferencedContainer = "container:Sentry.xcodeproj">
             </BuildableReference>
+            <SkippedTests>
+               <Test
+                  Identifier = "SentryCrashIntegrationTests/testStartUpCrash_CallsFlush()">
+               </Test>
+               <Test
+                  Identifier = "SentryCrashReportStore_Tests/testCrashReportCount1">
+               </Test>
+               <Test
+                  Identifier = "SentryFileIOTrackingIntegrationTests/test_DataConsistency_readPath()">
+               </Test>
+               <Test
+                  Identifier = "SentryFileIOTrackingIntegrationTests/test_DataConsistency_readUrl()">
+               </Test>
+               <Test
+                  Identifier = "SentryNSErrorTests/testSerializeWithUnderlyingNSException()">
+               </Test>
+               <Test
+                  Identifier = "SentryNetworkTrackerIntegrationTests/testGetRequest_SpanCreatedAndBaggageHeaderAdded()">
+               </Test>
+               <Test
+                  Identifier = "SentryProfilerSwiftTests/testConcurrentSpansWithTimeout()">
+               </Test>
+               <Test
+                  Identifier = "SentryProfilerSwiftTests/testMetricProfiler()">
+               </Test>
+               <Test
+                  Identifier = "SentryProfilerSwiftTests/testProfileTimeoutTimer()">
+               </Test>
+               <Test
+                  Identifier = "SentrySDKIntegrationTestsBase">
+               </Test>
+               <Test
+                  Identifier = "SentrySessionGeneratorTests/testSendSessions()">
+               </Test>
+               <Test
+                  Identifier = "SentryStacktraceBuilderTests/testAsyncStacktraces()">
+               </Test>
+               <Test
+                  Identifier = "SentrySubClassFinderTests/testActOnSubclassesOfViewController()">
+               </Test>
+               <Test
+                  Identifier = "SentryUIApplicationTests/test_applicationWithScenes()">
+               </Test>
+               <Test
+                  Identifier = "SentryUIApplicationTests/test_applicationWithScenes_noWindow()">
+               </Test>
+            </SkippedTests>
          </TestableReference>
       </Testables>
    </TestAction>

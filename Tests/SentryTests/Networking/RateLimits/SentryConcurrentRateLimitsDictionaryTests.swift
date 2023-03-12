@@ -6,6 +6,7 @@ class SentryConcurrentRateLimitsDictionaryTests: XCTestCase {
     private var sut: SentryConcurrentRateLimitsDictionary!
     
     override func setUp() {
+        super.setUp()
         currentDateProvider = TestCurrentDateProvider()
         sut = SentryConcurrentRateLimitsDictionary()
     }
@@ -13,28 +14,23 @@ class SentryConcurrentRateLimitsDictionaryTests: XCTestCase {
     func testTwoRateLimit() {
         let dateA = self.currentDateProvider.date()
         let dateB = dateA.addingTimeInterval(TimeInterval(1))
-        sut.addRateLimit(SentryRateLimitCategory.default, validUntil: dateA)
-        sut.addRateLimit(SentryRateLimitCategory.error, validUntil: dateB)
-        XCTAssertEqual(dateA, self.sut.getRateLimit(for: SentryRateLimitCategory.default))
-        XCTAssertEqual(dateB, self.sut.getRateLimit(for: SentryRateLimitCategory.error))
+        sut.addRateLimit(SentryDataCategory.default, validUntil: dateA)
+        sut.addRateLimit(SentryDataCategory.error, validUntil: dateB)
+        XCTAssertEqual(dateA, self.sut.getRateLimit(for: SentryDataCategory.default))
+        XCTAssertEqual(dateB, self.sut.getRateLimit(for: SentryDataCategory.error))
     }
     
     func testOverridingRateLimit() {
         let dateA = self.currentDateProvider.date()
         let dateB = dateA.addingTimeInterval(TimeInterval(1))
         
-        sut.addRateLimit(SentryRateLimitCategory.attachment, validUntil: dateA)
-        XCTAssertEqual(dateA, self.sut.getRateLimit(for: SentryRateLimitCategory.attachment))
+        sut.addRateLimit(SentryDataCategory.attachment, validUntil: dateA)
+        XCTAssertEqual(dateA, self.sut.getRateLimit(for: SentryDataCategory.attachment))
 
-        sut.addRateLimit(SentryRateLimitCategory.attachment, validUntil: dateB)
-        XCTAssertEqual(dateB, self.sut.getRateLimit(for: SentryRateLimitCategory.attachment))
+        sut.addRateLimit(SentryDataCategory.attachment, validUntil: dateB)
+        XCTAssertEqual(dateB, self.sut.getRateLimit(for: SentryDataCategory.attachment))
     }
 
-    // Altough we only run this test above the below specified versions, we exped the
-    // implementation to be thread safe
-    @available(tvOS 10.0, *)
-    @available(OSX 10.12, *)
-    @available(iOS 10.0, *)
     func testConcurrentReadWrite() {
         let queue1 = DispatchQueue(label: "SentryConcurrentRateLimitsStorageTests1", qos: .background, attributes: [.concurrent, .initiallyInactive])
         let queue2 = DispatchQueue(label: "SentryConcurrentRateLimitsStorageTests2", qos: .utility, attributes: [.concurrent, .initiallyInactive])
@@ -93,12 +89,12 @@ class SentryConcurrentRateLimitsDictionaryTests: XCTestCase {
     // Even if we don't run this test below OSX 10.12 we expect the actual
     // implementation to be thread safe.
     @available(OSX 10.12, *)
-    private func getCategory(rawValue: NSNumber) -> SentryRateLimitCategory {
-        func failedToCreateCategory() -> SentryRateLimitCategory {
+    private func getCategory(rawValue: NSNumber) -> SentryDataCategory {
+        func failedToCreateCategory() -> SentryDataCategory {
             XCTFail("Could not create category from \(rawValue)")
-            return SentryRateLimitCategory.default
+            return SentryDataCategory.default
         }
         
-        return SentryRateLimitCategory(rawValue: UInt(truncating: rawValue)) ?? failedToCreateCategory()
+        return SentryDataCategory(rawValue: UInt(truncating: rawValue)) ?? failedToCreateCategory()
     }
 }

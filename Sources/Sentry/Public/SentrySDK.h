@@ -1,49 +1,39 @@
-#import <Foundation/Foundation.h>
-
 #import "SentryDefines.h"
 
-@class SentryHub, SentryOptions, SentryEvent, SentryBreadcrumb, SentryScope, SentryUser, SentryId,
-    SentryUserFeedback;
+@protocol SentrySpan;
+
+@class SentryOptions, SentryEvent, SentryBreadcrumb, SentryScope, SentryUser, SentryId,
+    SentryUserFeedback, SentryTransactionContext;
 
 NS_ASSUME_NONNULL_BEGIN
 
-// NS_SWIFT_NAME(SDK)
 /**
- "static api" for easy access to most common sentry sdk features
-
- try `SentryHub` for advanced features
+ * The main entry point for the SentrySDK.
+ *
+ * We recommend using `[Sentry startWithConfigureOptions]` to initialize Sentry.
  */
 @interface SentrySDK : NSObject
 SENTRY_NO_INIT
 
 /**
- * Returns current hub
+ * The current active transaction or span bound to the scope.
  */
-+ (SentryHub *)currentHub;
+@property (nullable, class, nonatomic, readonly) id<SentrySpan> span;
 
 /**
- * This forces a crash, useful to test the SentryCrash integration
+ * Indicates whether the SentrySDK is enabled.
  */
-+ (void)crash;
-
-/**
- * Sets current hub
- */
-+ (void)setCurrentHub:(SentryHub *)hub;
-
-/**
- * Inits and configures Sentry (SentryHub, SentryClient) and sets up all integrations.
- */
-+ (void)startWithOptions:(NSDictionary<NSString *, id> *)optionsDict NS_SWIFT_NAME(start(options:));
-
-/**
- * Inits and configures Sentry (SentryHub, SentryClient) and sets up all integrations.
- */
-+ (void)startWithOptionsObject:(SentryOptions *)options NS_SWIFT_NAME(start(options:));
+@property (class, nonatomic, readonly) BOOL isEnabled;
 
 /**
  * Inits and configures Sentry (SentryHub, SentryClient) and sets up all integrations. Make sure to
- * set a valid DSN otherwise.
+ * set a valid DSN.
+ */
++ (void)startWithOptions:(SentryOptions *)options NS_SWIFT_NAME(start(options:));
+
+/**
+ * Inits and configures Sentry (SentryHub, SentryClient) and sets up all integrations. Make sure to
+ * set a valid DSN.
  */
 + (void)startWithConfigureOptions:(void (^)(SentryOptions *options))configureOptions
     NS_SWIFT_NAME(start(configureOptions:));
@@ -80,6 +70,80 @@ SENTRY_NO_INIT
  */
 + (SentryId *)captureEvent:(SentryEvent *)event
             withScopeBlock:(void (^)(SentryScope *scope))block NS_SWIFT_NAME(capture(event:block:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param name The transaction name.
+ * @param operation Short code identifying the type of operation the span is measuring.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithName:(NSString *)name
+                                 operation:(NSString *)operation
+    NS_SWIFT_NAME(startTransaction(name:operation:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param name The transaction name.
+ * @param operation Short code identifying the type of operation the span is measuring.
+ * @param bindToScope Indicates whether the SDK should bind the new transaction to the scope.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithName:(NSString *)name
+                                 operation:(NSString *)operation
+                               bindToScope:(BOOL)bindToScope
+    NS_SWIFT_NAME(startTransaction(name:operation:bindToScope:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param transactionContext The transaction context.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithContext:(SentryTransactionContext *)transactionContext
+    NS_SWIFT_NAME(startTransaction(transactionContext:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param transactionContext The transaction context.
+ * @param bindToScope Indicates whether the SDK should bind the new transaction to the scope.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithContext:(SentryTransactionContext *)transactionContext
+                                  bindToScope:(BOOL)bindToScope
+    NS_SWIFT_NAME(startTransaction(transactionContext:bindToScope:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param transactionContext The transaction context.
+ * @param bindToScope Indicates whether the SDK should bind the new transaction to the scope.
+ * @param customSamplingContext Additional information about the sampling context.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithContext:(SentryTransactionContext *)transactionContext
+                                  bindToScope:(BOOL)bindToScope
+                        customSamplingContext:(NSDictionary<NSString *, id> *)customSamplingContext
+    NS_SWIFT_NAME(startTransaction(transactionContext:bindToScope:customSamplingContext:));
+
+/**
+ * Creates a transaction, binds it to the hub and returns the instance.
+ *
+ * @param transactionContext The transaction context.
+ * @param customSamplingContext Additional information about the sampling context.
+ *
+ * @return The created transaction.
+ */
++ (id<SentrySpan>)startTransactionWithContext:(SentryTransactionContext *)transactionContext
+                        customSamplingContext:(NSDictionary<NSString *, id> *)customSamplingContext
+    NS_SWIFT_NAME(startTransaction(transactionContext:customSamplingContext:));
 
 /**
  * Captures an error event and sends it to Sentry.
@@ -191,15 +255,19 @@ SENTRY_NO_INIT
     NS_SWIFT_NAME(capture(userFeedback:));
 
 /**
- * Adds a SentryBreadcrumb to the current Scope on the `currentHub`.
- * If the total number of breadcrumbs exceeds the `max_breadcrumbs` setting, the
- * oldest breadcrumb is removed.
+ * Adds a Breadcrumb to the current Scope of the current Hub. If the total number of breadcrumbs
+ * exceeds the `SentryOptions.maxBreadcrumbs`, the SDK removes the oldest breadcrumb.
+ *
+ * @param crumb The Breadcrumb to add to the current Scope of the current Hub.
  */
-+ (void)addBreadcrumb:(SentryBreadcrumb *)crumb NS_SWIFT_NAME(addBreadcrumb(crumb:));
++ (void)addBreadcrumb:(SentryBreadcrumb *)crumb NS_SWIFT_NAME(addBreadcrumb(_:));
 
-//- `configure_scope(callback)`: Calls a callback with a scope object that can
-// be reconfigured. This is used to attach contextual data for future events in
-// the same scope.
+/**
+ * Use this method to modify the current Scope of the current Hub. The SDK uses the Scope to attach
+ * contextual data to events.
+ *
+ * @param callback The callback for configuring the current Scope of the current Hub.
+ */
 + (void)configureScope:(void (^)(SentryScope *scope))callback;
 
 /**
@@ -208,9 +276,45 @@ SENTRY_NO_INIT
 @property (nonatomic, class, readonly) BOOL crashedLastRun;
 
 /**
- * Set global user -> thus will be sent with every event
+ * Set user to the current Scope of the current Hub.
+ *
+ * @param user The user to set to the current Scope.
  */
-+ (void)setUser:(SentryUser *_Nullable)user;
++ (void)setUser:(nullable SentryUser *)user;
+
+/**
+ * Starts a new SentrySession. If there's a running SentrySession, it ends it before starting the
+ * new one. You can use this method in combination with endSession to manually track SentrySessions.
+ * The SDK uses SentrySession to inform Sentry about release and project associated project health.
+ */
++ (void)startSession;
+
+/**
+ * Ends the current SentrySession. You can use this method in combination with startSession to
+ * manually track SentrySessions. The SDK uses SentrySession to inform Sentry about release and
+ * project associated project health.
+ */
++ (void)endSession;
+
+/**
+ * This forces a crash, useful to test the SentryCrash integration
+ */
++ (void)crash;
+
+/**
+ * Waits synchronously for the SDK to flush out all queued and cached items for up to the specified
+ * timeout in seconds. If there is no internet connection, the function returns immediately. The SDK
+ * doesn't dispose the client or the hub.
+ *
+ * @param timeout The time to wait for the SDK to complete the flush.
+ */
++ (void)flush:(NSTimeInterval)timeout NS_SWIFT_NAME(flush(timeout:));
+
+/**
+ * Closes the SDK, uninstalls all the integrations, and calls flush with
+ * ``SentryOptions/shutdownTimeInterval``.
+ */
++ (void)close;
 
 @end
 

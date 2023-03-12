@@ -9,13 +9,13 @@ class SentryMechanismTests: XCTestCase {
         
         // Changing the original doesn't modify the serialized
         mechanism.data?["other"] = "object"
-        mechanism.meta?["data"] = "object"
-        mechanism.error = nil
+        mechanism.meta = nil
 
         let expected = TestData.mechanism
         XCTAssertEqual(expected.type, actual["type"] as! String)
         XCTAssertEqual(expected.desc, actual["description"] as? String)
         XCTAssertEqual(expected.handled, actual["handled"] as? NSNumber)
+        XCTAssertEqual(expected.synthetic, actual["synthetic"] as? NSNumber)
         XCTAssertEqual(expected.helpLink, actual["help_link"] as? String)
 
         guard let something = (actual["data"] as? [String: Any])?["something"] as? [String: Any] else {
@@ -27,15 +27,19 @@ class SentryMechanismTests: XCTestCase {
         let date = currentDateProvider.date() as NSDate
         XCTAssertEqual(date.sentry_toIso8601String(), something["date"] as? String)
 
-        let meta = actual["meta"] as! [String: Any]
-        XCTAssertEqual(2, meta.count)
+        XCTAssertNotNil(actual["meta"])
+    }
+    
+    func testSerialize_OnlyType_NullablePropertiesNotAdded() {
+        let type = "type"
+        let mechanism = Mechanism(type: type)
         
-        guard let error = meta["ns_error"] as? [String: Any] else {
-            XCTFail("The serialization doesn't contain ns_error")
-            return
-        }
-        let nsError = expected.error! as SentryNSError
-        XCTAssertEqual(nsError.domain, error["domain"] as? String)
-        XCTAssertEqual(nsError.code, error["code"] as? Int)
+        let actual = mechanism.serialize()
+        XCTAssertEqual(1, actual.count)
+        XCTAssertEqual(type, actual["type"] as? String)
+    }
+    
+    func testSerialize_Bools() {
+        SentryBooleanSerialization.test(Mechanism(type: ""), property: "handled")
     }
 }

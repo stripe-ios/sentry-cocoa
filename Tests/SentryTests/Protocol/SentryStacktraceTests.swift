@@ -14,6 +14,7 @@ class SentryStacktraceTests: XCTestCase {
         let frames = actual["frames"] as? [Any]
         XCTAssertEqual(1, frames?.count)
         XCTAssertEqual(["register": "one"], actual["registers"] as? [String: String])
+        XCTAssertEqual(stacktrace.snapshot, actual["snapshot"] as? NSNumber)
     }
     
     func testSerializeNoRegisters() {
@@ -30,5 +31,9 @@ class SentryStacktraceTests: XCTestCase {
         let actual = stacktrace.serialize()
         
         XCTAssertNil(actual["frames"] as? [Any])
+    }
+    
+    func testSerialize_Bools() {
+        SentryBooleanSerialization.test(SentryStacktrace(frames: [], registers: [:]), property: "snapshot")
     }
 }

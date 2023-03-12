@@ -1,7 +1,7 @@
 #import "SentryOptions.h"
 #import "SentryError.h"
+#import "SentryOptions+HybridSDKs.h"
 #import "SentrySDK.h"
-#import "SentrySdkInfo.h"
 #import "SentryTests-Swift.h"
 #import <XCTest/XCTest.h>
 
@@ -15,6 +15,10 @@
 {
     NSError *error = nil;
     SentryOptions *options = [[SentryOptions alloc] initWithDict:@{} didFailWithError:&error];
+
+    XCTAssertNil(options.parsedDsn);
+    XCTAssertEqual(NO, options.debug);
+    XCTAssertEqual(kSentryErrorInvalidDsnError, error.code);
 
     [self assertDsnNil:options andError:error];
 }
@@ -78,7 +82,7 @@
 - (void)testEnvironment
 {
     SentryOptions *options = [self getValidOptions:@{}];
-    XCTAssertNil(options.environment);
+    XCTAssertEqual(options.environment, kSentryDefaultEnvironment);
 
     options = [self getValidOptions:@{ @"environment" : @"xxx" }];
     XCTAssertEqualObjects(options.environment, @"xxx");
@@ -164,25 +168,93 @@
     XCTAssertEqual(expectedValue, options.enabled);
 }
 
-- (void)testMaxBreadCrumbs
+- (void)testMaxBreadcrumbs
 {
-    NSNumber *maxBreadCrumbs = @20;
+    NSNumber *maxBreadcrumbs = @20;
 
-    SentryOptions *options = [self getValidOptions:@{ @"maxBreadcrumbs" : maxBreadCrumbs }];
+    SentryOptions *options = [self getValidOptions:@{ @"maxBreadcrumbs" : maxBreadcrumbs }];
 
-    XCTAssertEqual([maxBreadCrumbs unsignedIntValue], options.maxBreadcrumbs);
+    XCTAssertEqual([maxBreadcrumbs unsignedIntValue], options.maxBreadcrumbs);
 }
 
-- (void)testDefaultMaxBreadCrumbs
+- (void)testEnableNetworkBreadcrumbs
+{
+    [self testBooleanField:@"enableNetworkBreadcrumbs"];
+}
+
+- (void)testEnableAutoBreadcrumbTracking
+{
+    [self testBooleanField:@"enableAutoBreadcrumbTracking"];
+}
+
+- (void)testEnableCoreDataTracking
+{
+    [self testBooleanField:@"enableCoreDataTracing" defaultValue:YES];
+}
+
+- (void)testSendClientReports
+{
+    [self testBooleanField:@"sendClientReports" defaultValue:YES];
+}
+
+- (void)testDefaultMaxBreadcrumbs
 {
     SentryOptions *options = [self getValidOptions:@{}];
 
     XCTAssertEqual([@100 unsignedIntValue], options.maxBreadcrumbs);
 }
 
+- (void)testMaxBreadcrumbsGarbage
+{
+    SentryOptions *options = [self getValidOptions:@{ @"maxBreadcrumbs" : self }];
+
+    XCTAssertEqual(100, options.maxBreadcrumbs);
+}
+
+- (void)testMaxCacheItems
+{
+    NSNumber *maxCacheItems = @20;
+
+    SentryOptions *options = [self getValidOptions:@{ @"maxCacheItems" : maxCacheItems }];
+
+    XCTAssertEqual([maxCacheItems unsignedIntValue], options.maxCacheItems);
+}
+
+- (void)testMaxCacheItemsGarbage
+{
+    SentryOptions *options = [self getValidOptions:@{ @"maxCacheItems" : self }];
+
+    XCTAssertEqual(30, options.maxCacheItems);
+}
+
+- (void)testDefaultMaxCacheItems
+{
+    SentryOptions *options = [self getValidOptions:@{}];
+
+    XCTAssertEqual([@30 unsignedIntValue], options.maxCacheItems);
+}
+
+- (void)testCacheDirectoryPath
+{
+    SentryOptions *options = [self getValidOptions:@{ @"cacheDirectoryPath" : @"abc" }];
+    XCTAssertEqualObjects(options.cacheDirectoryPath, @"abc");
+
+    SentryOptions *options2 = [self getValidOptions:@{ @"cacheDirectoryPath" : @"" }];
+    XCTAssertEqualObjects(options2.cacheDirectoryPath, @"");
+
+    SentryOptions *options3 = [self getValidOptions:@{ @"cacheDirectoryPath" : @2 }];
+    XCTAssertEqualObjects(options3.cacheDirectoryPath, [self getDefaultCacheDirectoryPath]);
+}
+
+- (NSString *)getDefaultCacheDirectoryPath
+{
+    return NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES)
+        .firstObject;
+}
+
 - (void)testBeforeSend
 {
-    SentryEvent * (^callback)(SentryEvent *event) = ^(SentryEvent *event) { return event; };
+    SentryBeforeSendEventCallback callback = ^(SentryEvent *event) { return event; };
     SentryOptions *options = [self getValidOptions:@{ @"beforeSend" : callback }];
 
     XCTAssertEqual(callback, options.beforeSend);
@@ -195,9 +267,23 @@
     XCTAssertNil(options.beforeSend);
 }
 
+- (void)testGarbageBeforeSend_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"beforeSend" : @"fault" }];
+
+    XCTAssertNil(options.beforeSend);
+}
+
+- (void)testNSNullBeforeSend_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"beforeSend" : [NSNull null] }];
+
+    XCTAssertFalse([options.beforeSend isEqual:[NSNull null]]);
+}
+
 - (void)testBeforeBreadcrumb
 {
-    SentryBreadcrumb * (^callback)(SentryBreadcrumb *event)
+    SentryBeforeBreadcrumbCallback callback
         = ^(SentryBreadcrumb *breadcrumb) { return breadcrumb; };
     SentryOptions *options = [self getValidOptions:@{ @"beforeBreadcrumb" : callback }];
 
@@ -211,10 +297,68 @@
     XCTAssertNil(options.beforeBreadcrumb);
 }
 
+- (void)testTracePropagationTargets
+{
+    SentryOptions *options =
+        [self getValidOptions:@{ @"tracePropagationTargets" : @[ @"localhost" ] }];
+
+    XCTAssertEqual(options.tracePropagationTargets.count, 1);
+    XCTAssertEqual(options.tracePropagationTargets[0], @"localhost");
+}
+
+- (void)testTracePropagationTargetsInvalidInstanceDoesntCrash
+{
+    SentryOptions *options = [self getValidOptions:@{ @"tracePropagationTargets" : @[ @YES ] }];
+
+    XCTAssertEqual(options.tracePropagationTargets.count, 1);
+    XCTAssertEqual(options.tracePropagationTargets[0], @YES);
+}
+
+- (void)testFailedRequestTargets
+{
+    SentryOptions *options =
+        [self getValidOptions:@{ @"failedRequestTargets" : @[ @"localhost" ] }];
+
+    XCTAssertEqual(options.failedRequestTargets.count, 1);
+    XCTAssertEqual(options.failedRequestTargets[0], @"localhost");
+}
+
+- (void)testFailedRequestTargetsInvalidInstanceDoesntCrash
+{
+    SentryOptions *options = [self getValidOptions:@{ @"failedRequestTargets" : @[ @YES ] }];
+
+    XCTAssertEqual(options.failedRequestTargets.count, 1);
+    XCTAssertEqual(options.failedRequestTargets[0], @YES);
+}
+
+- (void)testEnableCaptureFailedRequests
+{
+    [self testBooleanField:@"enableCaptureFailedRequests" defaultValue:YES];
+}
+
+- (void)testFailedRequestStatusCodes
+{
+    SentryHttpStatusCodeRange *httpStatusCodeRange =
+        [[SentryHttpStatusCodeRange alloc] initWithMin:400 max:599];
+    SentryOptions *options =
+        [self getValidOptions:@{ @"failedRequestStatusCodes" : @[ httpStatusCodeRange ] }];
+
+    XCTAssertEqual(options.failedRequestStatusCodes.count, 1);
+    XCTAssertEqual(options.failedRequestStatusCodes[0].min, 400);
+    XCTAssertEqual(options.failedRequestStatusCodes[0].max, 599);
+}
+
+- (void)testGarbageBeforeBreadcrumb_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"beforeBreadcrumb" : @"fault" }];
+
+    XCTAssertEqual(nil, options.beforeBreadcrumb);
+}
+
 - (void)testOnCrashedLastRun
 {
     __block BOOL onCrashedLastRunCalled = NO;
-    void (^callback)(SentryEvent *event) = ^(SentryEvent *event) {
+    SentryOnCrashedLastRunCallback callback = ^(SentryEvent *event) {
         onCrashedLastRunCalled = YES;
         XCTAssertNotNil(event);
     };
@@ -233,12 +377,19 @@
     XCTAssertNil(options.onCrashedLastRun);
 }
 
+- (void)testGarbageOnCrashedLastRun_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"onCrashedLastRun" : @"fault" }];
+
+    XCTAssertNil(options.onCrashedLastRun);
+}
+
 - (void)testIntegrations
 {
     NSArray<NSString *> *integrations = @[ @"integration1", @"integration2" ];
     SentryOptions *options = [self getValidOptions:@{ @"integrations" : integrations }];
 
-    XCTAssertEqual(integrations, options.integrations);
+    [self assertArrayEquals:integrations actual:options.integrations];
 }
 
 - (void)testDefaultIntegrations
@@ -249,25 +400,49 @@
         @"Default integrations are not set correctly");
 }
 
+- (void)testSampleRateWithDict
+{
+    NSNumber *sampleRate = @0.1;
+    SentryOptions *options = [self getValidOptions:@{ @"sampleRate" : sampleRate }];
+    XCTAssertEqual(sampleRate, options.sampleRate);
+}
+
+- (void)testSampleRate_SetToNil
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.sampleRate = nil;
+    XCTAssertNil(options.sampleRate);
+}
+
 - (void)testSampleRateLowerBound
 {
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.sampleRate = @0.5;
+
     NSNumber *sampleRateLowerBound = @0;
-    SentryOptions *options = [self getValidOptions:@{ @"sampleRate" : sampleRateLowerBound }];
+    options.sampleRate = sampleRateLowerBound;
     XCTAssertEqual(sampleRateLowerBound, options.sampleRate);
 
+    options.sampleRate = @0.5;
+
     NSNumber *sampleRateTooLow = @-0.01;
-    options = [self getValidOptions:@{ @"sampleRate" : sampleRateTooLow }];
+    options.sampleRate = sampleRateTooLow;
     XCTAssertEqual(@1, options.sampleRate);
 }
 
 - (void)testSampleRateUpperBound
 {
-    NSNumber *sampleRateUpperBound = @1;
-    SentryOptions *options = [self getValidOptions:@{ @"sampleRate" : sampleRateUpperBound }];
-    XCTAssertEqual(sampleRateUpperBound, options.sampleRate);
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.sampleRate = @0.5;
 
-    NSNumber *sampleRateTooHigh = @1.01;
-    options = [self getValidOptions:@{ @"sampleRate" : sampleRateTooHigh }];
+    NSNumber *upperBound = @1;
+    options.sampleRate = upperBound;
+    XCTAssertEqual(upperBound, options.sampleRate);
+
+    options.sampleRate = @0.5;
+
+    NSNumber *tooHigh = @1.01;
+    options.sampleRate = tooHigh;
     XCTAssertEqual(@1, options.sampleRate);
 }
 
@@ -280,16 +455,12 @@
 
 - (void)testEnableAutoSessionTracking
 {
-    SentryOptions *options = [self getValidOptions:@{ @"enableAutoSessionTracking" : @YES }];
-
-    XCTAssertEqual(YES, options.enableAutoSessionTracking);
+    [self testBooleanField:@"enableAutoSessionTracking"];
 }
 
-- (void)testDefaultEnableAutoSessionTracking
+- (void)testEnableWatchdogTerminationTracking
 {
-    SentryOptions *options = [self getValidOptions:@{}];
-
-    XCTAssertEqual(YES, options.enableAutoSessionTracking);
+    [self testBooleanField:@"enableWatchdogTerminationTracking"];
 }
 
 - (void)testSessionTrackingIntervalMillis
@@ -308,40 +479,153 @@
     XCTAssertEqual([@30000 unsignedIntValue], options.sessionTrackingIntervalMillis);
 }
 
-- (void)testAttachStackTraceDisabledPerDefault
+- (void)testAttachStackTrace
 {
-    SentryOptions *options = [self getValidOptions:@{}];
-    XCTAssertEqual(YES, options.attachStacktrace);
+    [self testBooleanField:@"attachStacktrace"];
 }
 
-- (void)testAttachStackTraceDisabled
+- (void)testStitchAsyncCodeDisabledPerDefault
 {
-    SentryOptions *options = [self getValidOptions:@{ @"attachStacktrace" : @NO }];
-    XCTAssertEqual(NO, options.attachStacktrace);
+    [self testBooleanField:@"stitchAsyncCode" defaultValue:NO];
 }
 
-- (void)testInvalidAttachStackTrace
+- (void)testEnableIOTracking
 {
-    SentryOptions *options = [self getValidOptions:@{ @"attachStacktrace" : @"Invalid" }];
-    XCTAssertEqual(NO, options.attachStacktrace);
+    [self testBooleanField:@"enableFileIOTracing" defaultValue:YES];
 }
 
 - (void)testEmptyConstructorSetsDefaultValues
 {
     SentryOptions *options = [[SentryOptions alloc] init];
+    XCTAssertNil(options.parsedDsn);
+    [self assertDefaultValues:options];
+}
 
+- (void)testNSNull_SetsDefaultValue
+{
+    SentryOptions *options = [[SentryOptions alloc] initWithDict:@{
+        @"dsn" : [NSNull null],
+        @"enabled" : [NSNull null],
+        @"debug" : [NSNull null],
+        @"diagnosticLevel" : [NSNull null],
+        @"release" : [NSNull null],
+        @"environment" : [NSNull null],
+        @"dist" : [NSNull null],
+        @"maxBreadcrumbs" : [NSNull null],
+        @"enableNetworkBreadcrumbs" : [NSNull null],
+        @"maxCacheItems" : [NSNull null],
+        @"cacheDirectoryPath" : [NSNull null],
+        @"beforeSend" : [NSNull null],
+        @"beforeBreadcrumb" : [NSNull null],
+        @"onCrashedLastRun" : [NSNull null],
+        @"integrations" : [NSNull null],
+        @"sampleRate" : [NSNull null],
+        @"enableAutoSessionTracking" : [NSNull null],
+        @"enableOutOfMemoryTracking" : [NSNull null],
+        @"sessionTrackingIntervalMillis" : [NSNull null],
+        @"attachStacktrace" : [NSNull null],
+        @"stitchAsyncCode" : [NSNull null],
+        @"maxAttachmentSize" : [NSNull null],
+        @"sendDefaultPii" : [NSNull null],
+        @"enableAutoPerformanceTracing" : [NSNull null],
+#if SENTRY_HAS_UIKIT
+        @"enableUIViewControllerTracing" : [NSNull null],
+        @"attachScreenshot" : [NSNull null],
+#endif
+        @"enableAppHangTracking" : [NSNull null],
+        @"appHangTimeoutInterval" : [NSNull null],
+        @"enableNetworkTracking" : [NSNull null],
+        @"enableAutoBreadcrumbTracking" : [NSNull null],
+        @"tracesSampleRate" : [NSNull null],
+        @"tracesSampler" : [NSNull null],
+        @"inAppIncludes" : [NSNull null],
+        @"inAppExcludes" : [NSNull null],
+        @"urlSessionDelegate" : [NSNull null],
+        @"enableSwizzling" : [NSNull null],
+        @"enableIOTracking" : [NSNull null],
+        @"sdk" : [NSNull null],
+        @"enableCaptureFailedRequests" : [NSNull null],
+        @"failedRequestStatusCodes" : [NSNull null],
+    }
+                                                didFailWithError:nil];
+
+    XCTAssertNotNil(options.parsedDsn);
+    [self assertDefaultValues:options];
+}
+
+- (void)assertDefaultValues:(SentryOptions *)options
+{
     XCTAssertEqual(YES, options.enabled);
+    XCTAssertEqual(2.0, options.shutdownTimeInterval);
     XCTAssertEqual(NO, options.debug);
     XCTAssertEqual(kSentryLevelDebug, options.diagnosticLevel);
-    XCTAssertNil(options.parsedDsn);
+    XCTAssertEqual(options.environment, kSentryDefaultEnvironment);
+    XCTAssertNil(options.dist);
     XCTAssertEqual(defaultMaxBreadcrumbs, options.maxBreadcrumbs);
+    XCTAssertTrue(options.enableNetworkBreadcrumbs);
+    XCTAssertEqual(30, options.maxCacheItems);
+
+    XCTAssertTrue([[self getDefaultCacheDirectoryPath] isEqualToString:options.cacheDirectoryPath]);
+    XCTAssertNil(options.beforeSend);
+    XCTAssertNil(options.beforeBreadcrumb);
+    XCTAssertNil(options.onCrashedLastRun);
     XCTAssertTrue([[SentryOptions defaultIntegrations] isEqualToArray:options.integrations],
         @"Default integrations are not set correctly");
     XCTAssertEqual(@1, options.sampleRate);
     XCTAssertEqual(YES, options.enableAutoSessionTracking);
+    XCTAssertEqual(YES, options.enableWatchdogTerminationTracking);
     XCTAssertEqual([@30000 unsignedIntValue], options.sessionTrackingIntervalMillis);
     XCTAssertEqual(YES, options.attachStacktrace);
+    XCTAssertEqual(NO, options.stitchAsyncCode);
     XCTAssertEqual(20 * 1024 * 1024, options.maxAttachmentSize);
+    XCTAssertEqual(NO, options.sendDefaultPii);
+    XCTAssertTrue(options.enableAutoPerformanceTracing);
+#if SENTRY_HAS_UIKIT
+    XCTAssertTrue(options.enableUIViewControllerTracing);
+    XCTAssertFalse(options.attachScreenshot);
+    XCTAssertEqual(3.0, options.idleTimeout);
+    XCTAssertEqual(options.enableUserInteractionTracing, YES);
+    XCTAssertEqual(options.enablePreWarmedAppStartTracing, NO);
+    XCTAssertEqual(options.attachViewHierarchy, NO);
+#endif
+    XCTAssertTrue(options.enableAppHangTracking);
+    XCTAssertEqual(options.appHangTimeoutInterval, 2);
+    XCTAssertEqual(YES, options.enableNetworkTracking);
+    XCTAssertNil(options.tracesSampleRate);
+    XCTAssertNil(options.tracesSampler);
+    XCTAssertEqualObjects([self getDefaultInAppIncludes], options.inAppIncludes);
+    XCTAssertEqual(@[], options.inAppExcludes);
+    XCTAssertNil(options.urlSessionDelegate);
+    XCTAssertEqual(YES, options.enableSwizzling);
+    XCTAssertEqual(YES, options.enableFileIOTracing);
+    XCTAssertEqual(YES, options.enableAutoBreadcrumbTracking);
+
+#if SENTRY_HAS_METRIC_KIT
+    if (@available(iOS 15.0, macOS 12.0, macCatalyst 15.0, *)) {
+        XCTAssertEqual(NO, options.enableMetricKit);
+    }
+#endif
+
+    NSRegularExpression *regexTrace = options.tracePropagationTargets[0];
+    XCTAssertTrue([regexTrace.pattern isEqualToString:@".*"]);
+
+    NSRegularExpression *regexRequests = options.failedRequestTargets[0];
+    XCTAssertTrue([regexRequests.pattern isEqualToString:@".*"]);
+
+    XCTAssertEqual(YES, options.enableCaptureFailedRequests);
+
+    SentryHttpStatusCodeRange *range = options.failedRequestStatusCodes[0];
+    XCTAssertEqual(500, range.min);
+    XCTAssertEqual(599, range.max);
+
+#if SENTRY_TARGET_PROFILING_SUPPORTED
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    XCTAssertEqual(NO, options.enableProfiling);
+#    pragma clang diagnostic pop
+    XCTAssertNil(options.profilesSampleRate);
+    XCTAssertNil(options.profilesSampler);
+#endif
 }
 
 - (void)testSetValidDsn
@@ -378,13 +662,26 @@
     XCTAssertEqual(YES, options.enabled);
 }
 
-- (void)testSdkInfo
+#if TARGET_OS_OSX
+- (void)testDsnViaEnvironment
 {
+    setenv("SENTRY_DSN", "https://username:password@sentry.io/1", 1);
     SentryOptions *options = [[SentryOptions alloc] init];
-
-    XCTAssertEqual(SentryMeta.sdkName, options.sdkInfo.name);
-    XCTAssertEqual(SentryMeta.versionString, options.sdkInfo.version);
+    XCTAssertEqualObjects(options.dsn, @"https://username:password@sentry.io/1");
+    XCTAssertNotNil(options.parsedDsn);
+    setenv("SENTRY_DSN", "", 1);
 }
+
+- (void)testInvalidDsnViaEnvironment
+{
+    setenv("SENTRY_DSN", "foo_bar", 1);
+    SentryOptions *options = [[SentryOptions alloc] init];
+    XCTAssertNil(options.dsn);
+    XCTAssertNil(options.parsedDsn);
+    XCTAssertEqual(options.enabled, YES);
+    setenv("SENTRY_DSN", "", 1);
+}
+#endif
 
 - (void)testMaxAttachmentSize
 {
@@ -403,24 +700,333 @@
 
 - (void)testSendDefaultPii
 {
-    SentryOptions *options = [self getValidOptions:@{ @"sendDefaultPii" : @YES }];
-
-    XCTAssertTrue(options.sendDefaultPii);
+    [self testBooleanField:@"sendDefaultPii" defaultValue:NO];
 }
 
-- (void)testSendDefaultPiiGarbage
+- (void)testEnableAutoPerformanceTracing
 {
-    SentryOptions *options = [self getValidOptions:@{ @"sendDefaultPii" : @"no" }];
-
-    XCTAssertFalse(options.sendDefaultPii);
+    [self testBooleanField:@"enableAutoPerformanceTracing"];
 }
 
-- (void)testDefaultSendDefaultPii
+#if SENTRY_HAS_UIKIT
+- (void)testEnableUIViewControllerTracing
+{
+    [self testBooleanField:@"enableUIViewControllerTracing"];
+}
+
+- (void)testAttachScreenshot
+{
+    [self testBooleanField:@"attachScreenshot" defaultValue:NO];
+}
+
+- (void)testEnableUserInteractionTracing
+{
+    [self testBooleanField:@"enableUserInteractionTracing" defaultValue:YES];
+}
+
+- (void)testEnableFileIOTracing
+{
+    [self testBooleanField:@"enableFileIOTracing" defaultValue:YES];
+}
+
+#    if SENTRY_HAS_METRIC_KIT
+
+- (void)testEnableMetricKit
+{
+    if (@available(iOS 14.0, macOS 12.0, macCatalyst 14.0, *)) {
+        [self testBooleanField:@"enableMetricKit" defaultValue:NO];
+    }
+}
+#    endif
+
+- (void)testShutdownTimeInterval
+{
+    NSNumber *shutdownTimeInterval = @2.1;
+    SentryOptions *options =
+        [self getValidOptions:@{ @"shutdownTimeInterval" : shutdownTimeInterval }];
+
+    XCTAssertEqual([shutdownTimeInterval doubleValue], options.shutdownTimeInterval);
+}
+
+- (void)testIdleTimeout
+{
+    NSNumber *idleTimeout = @2.1;
+    SentryOptions *options = [self getValidOptions:@{ @"idleTimeout" : idleTimeout }];
+
+    XCTAssertEqual([idleTimeout doubleValue], options.idleTimeout);
+}
+
+- (void)testEnablePreWarmedAppStartTracking
+{
+    [self testBooleanField:@"enablePreWarmedAppStartTracing" defaultValue:NO];
+}
+
+#endif
+
+- (void)testEnableAppHangTracking
+{
+    [self testBooleanField:@"enableAppHangTracking" defaultValue:YES];
+}
+
+- (void)testDefaultAppHangsTimeout
+{
+    SentryOptions *options = [self getValidOptions:@{}];
+    XCTAssertEqual(2, options.appHangTimeoutInterval);
+}
+
+- (void)testEnableNetworkTracking
+{
+    [self testBooleanField:@"enableNetworkTracking"];
+}
+
+- (void)testEnableSwizzling
+{
+    [self testBooleanField:@"enableSwizzling"];
+}
+
+- (void)testTracesSampleRate
+{
+    SentryOptions *options = [self getValidOptions:@{ @"tracesSampleRate" : @0.1 }];
+
+    XCTAssertEqual(options.tracesSampleRate.doubleValue, 0.1);
+}
+
+- (void)testDefaultTracesSampleRate
 {
     SentryOptions *options = [self getValidOptions:@{}];
 
-    XCTAssertFalse(options.sendDefaultPii);
+    XCTAssertNil(options.tracesSampleRate);
 }
+
+- (void)testTracesSampleRate_SetToNil
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampleRate = nil;
+    XCTAssertNil(options.tracesSampleRate);
+}
+
+- (void)testTracesSampleRateLowerBound
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampleRate = @0.5;
+
+    NSNumber *lowerBound = @0;
+    options.tracesSampleRate = lowerBound;
+    XCTAssertEqual(lowerBound, options.tracesSampleRate);
+
+    options.tracesSampleRate = @0.5;
+
+    NSNumber *tooLow = @-0.01;
+    options.tracesSampleRate = tooLow;
+    XCTAssertNil(options.tracesSampleRate);
+}
+
+- (void)testTracesSampleRateUpperBound
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampleRate = @0.5;
+
+    NSNumber *lowerBound = @1;
+    options.tracesSampleRate = lowerBound;
+    XCTAssertEqual(lowerBound, options.tracesSampleRate);
+
+    options.tracesSampleRate = @0.5;
+
+    NSNumber *tooLow = @1.01;
+    options.tracesSampleRate = tooLow;
+    XCTAssertNil(options.tracesSampleRate);
+}
+
+- (double)tracesSamplerCallback:(NSDictionary *)context
+{
+    return 0.1;
+}
+
+- (void)testTracesSampler
+{
+    SentryTracesSamplerCallback sampler = ^(SentrySamplingContext *context) {
+        XCTAssertNotNil(context);
+        return @1.0;
+    };
+
+    SentryOptions *options = [self getValidOptions:@{ @"tracesSampler" : sampler }];
+
+    SentrySamplingContext *context = [[SentrySamplingContext alloc] init];
+    XCTAssertEqual(options.tracesSampler(context), @1.0);
+}
+
+- (void)testDefaultTracesSampler
+{
+    SentryOptions *options = [self getValidOptions:@{}];
+    XCTAssertNil(options.tracesSampler);
+}
+
+- (void)testGarbageTracesSampler_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"tracesSampler" : @"fault" }];
+    XCTAssertNil(options.tracesSampler);
+}
+
+- (void)testIsTracingEnabled_NothingSet_IsDisabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    XCTAssertFalse(options.isTracingEnabled);
+}
+
+- (void)testIsTracingEnabled_TracesSampleRateSetToZero_IsDisabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampleRate = @0.00;
+    XCTAssertFalse(options.isTracingEnabled);
+}
+
+- (void)testIsTracingEnabled_TracesSampleRateSet_IsEnabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampleRate = @0.01;
+    XCTAssertTrue(options.isTracingEnabled);
+}
+
+- (void)testIsTracingEnabled_TracesSamplerSet_IsEnabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.tracesSampler = ^(SentrySamplingContext *context) {
+        XCTAssertNotNil(context);
+        return @0.0;
+    };
+    XCTAssertTrue(options.isTracingEnabled);
+}
+
+#if SENTRY_TARGET_PROFILING_SUPPORTED
+- (void)testEnableProfiling
+{
+    [self testBooleanField:@"enableProfiling" defaultValue:NO];
+}
+
+- (void)testProfilesSampleRate
+{
+    SentryOptions *options = [self getValidOptions:@{ @"profilesSampleRate" : @0.1 }];
+
+    XCTAssertEqual(options.profilesSampleRate.doubleValue, 0.1);
+}
+
+- (void)testDefaultProfilesSampleRate
+{
+    SentryOptions *options = [self getValidOptions:@{}];
+
+    XCTAssertNil(options.profilesSampleRate);
+}
+
+- (void)testProfilesSampleRate_SetToNil
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampleRate = nil;
+    XCTAssertNil(options.profilesSampleRate);
+}
+
+- (void)testProfilesSampleRateLowerBound
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampleRate = @0.5;
+
+    NSNumber *lowerBound = @0;
+    options.profilesSampleRate = lowerBound;
+    XCTAssertEqual(lowerBound, options.profilesSampleRate);
+
+    options.profilesSampleRate = @0.5;
+
+    NSNumber *tooLow = @-0.01;
+    options.profilesSampleRate = tooLow;
+    XCTAssertNil(options.profilesSampleRate);
+}
+
+- (void)testProfilesSampleRateUpperBound
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampleRate = @0.5;
+
+    NSNumber *lowerBound = @1;
+    options.profilesSampleRate = lowerBound;
+    XCTAssertEqual(lowerBound, options.profilesSampleRate);
+
+    options.profilesSampleRate = @0.5;
+
+    NSNumber *tooLow = @1.01;
+    options.profilesSampleRate = tooLow;
+    XCTAssertNil(options.profilesSampleRate);
+}
+
+- (void)testIsProfilingEnabled_NothingSet_IsDisabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    XCTAssertFalse(options.isProfilingEnabled);
+}
+
+- (void)testIsProfilingEnabled_ProfilesSampleRateSetToZero_IsDisabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampleRate = @0.00;
+    XCTAssertFalse(options.isProfilingEnabled);
+}
+
+- (void)testIsProfilingEnabled_ProfilesSampleRateSet_IsEnabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampleRate = @0.01;
+    XCTAssertTrue(options.isProfilingEnabled);
+}
+
+- (void)testIsProfilingEnabled_ProfilesSamplerSet_IsEnabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+    options.profilesSampler = ^(SentrySamplingContext *context) {
+        XCTAssertNotNil(context);
+        return @0.0;
+    };
+    XCTAssertTrue(options.isProfilingEnabled);
+}
+
+- (void)testIsProfilingEnabled_EnableProfilingSet_IsEnabled
+{
+    SentryOptions *options = [[SentryOptions alloc] init];
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    options.enableProfiling = YES;
+#    pragma clang diagnostic pop
+    XCTAssertTrue(options.isProfilingEnabled);
+}
+
+- (double)profilesSamplerCallback:(NSDictionary *)context
+{
+    return 0.1;
+}
+
+- (void)testProfilesSampler
+{
+    SentryTracesSamplerCallback sampler = ^(SentrySamplingContext *context) {
+        XCTAssertNotNil(context);
+        return @1.0;
+    };
+
+    SentryOptions *options = [self getValidOptions:@{ @"profilesSampler" : sampler }];
+
+    SentrySamplingContext *context = [[SentrySamplingContext alloc] init];
+    XCTAssertEqual(options.profilesSampler(context), @1.0);
+}
+
+- (void)testDefaultProfilesSampler
+{
+    SentryOptions *options = [self getValidOptions:@{}];
+    XCTAssertNil(options.profilesSampler);
+}
+
+- (void)testGarbageProfilesSampler_ReturnsNil
+{
+    SentryOptions *options = [self getValidOptions:@{ @"profilesSampler" : @"fault" }];
+    XCTAssertNil(options.profilesSampler);
+}
+
+#endif
 
 - (void)testInAppIncludes
 {
@@ -428,34 +1034,38 @@
     NSArray *inAppIncludes = @[ @"iOS-Swift", @"BusinessLogic", @1 ];
     SentryOptions *options = [self getValidOptions:@{ @"inAppIncludes" : inAppIncludes }];
 
-    NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
-    NSString *bundleExecutable = infoDict[@"CFBundleExecutable"];
+    NSString *bundleExecutable = [self getBundleExecutable];
     if (nil != bundleExecutable) {
         expected = [expected arrayByAddingObject:bundleExecutable];
     }
-    XCTAssertEqualObjects(expected, options.inAppIncludes);
+
+    [self assertArrayEquals:expected actual:options.inAppIncludes];
 }
 
 - (void)testAddInAppIncludes
 {
     SentryOptions *options = [self getValidOptions:@{}];
     [options addInAppInclude:@"App"];
-    XCTAssertEqualObjects(@[ @"App" ], options.inAppIncludes);
+
+    NSArray<NSString *> *expected = @[ @"App" ];
+    NSString *bundleExecutable = [self getBundleExecutable];
+    if (nil != bundleExecutable) {
+        expected = [expected arrayByAddingObject:bundleExecutable];
+    }
+
+    [self assertArrayEquals:expected actual:options.inAppIncludes];
+}
+
+- (NSString *)getBundleExecutable
+{
+    NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
+    return infoDict[@"CFBundleExecutable"];
 }
 
 - (void)testDefaultInAppIncludes
 {
     SentryOptions *options = [self getValidOptions:@{}];
-
-    NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
-    NSString *bundleExecutable = infoDict[@"CFBundleExecutable"];
-    NSArray<NSString *> *expected;
-    if (nil == bundleExecutable) {
-        expected = @[];
-    } else {
-        expected = @[ bundleExecutable ];
-    }
-    XCTAssertEqualObjects(expected, options.inAppIncludes);
+    XCTAssertEqualObjects([self getDefaultInAppIncludes], options.inAppIncludes);
 }
 
 - (void)testInAppExcludes
@@ -494,6 +1104,72 @@
                                                       didFailWithError:&error];
     XCTAssertNil(error);
     return sentryOptions;
+}
+
+- (void)testUrlSessionDelegate
+{
+    id<NSURLSessionDelegate> urlSessionDelegate = [[UrlSessionDelegateSpy alloc] init];
+
+    SentryOptions *options = [self getValidOptions:@{ @"urlSessionDelegate" : urlSessionDelegate }];
+
+    XCTAssertNotNil(options.urlSessionDelegate);
+}
+
+- (void)assertArrayEquals:(NSArray<NSString *> *)expected actual:(NSArray<NSString *> *)actual
+{
+    XCTAssertEqualObjects([expected sortedArrayUsingSelector:@selector(compare:)],
+        [actual sortedArrayUsingSelector:@selector(compare:)]);
+}
+
+- (void)testBooleanField:(NSString *)property
+{
+    [self testBooleanField:property defaultValue:YES];
+}
+
+- (void)testBooleanField:(NSString *)property defaultValue:(BOOL)defaultValue
+{
+    // Opposite of default
+    SentryOptions *options = [self getValidOptions:@{ property : @(!defaultValue) }];
+    XCTAssertEqual(!defaultValue, [self getProperty:property of:options]);
+
+    // Default
+    options = [self getValidOptions:@{}];
+    XCTAssertEqual(defaultValue, [self getProperty:property of:options]);
+
+    // Garbage
+    options = [self getValidOptions:@{ property : @"" }];
+    XCTAssertEqual(NO, [self getProperty:property of:options]);
+}
+
+- (BOOL)getProperty:(NSString *)property of:(SentryOptions *)options
+{
+    SEL selector = NSSelectorFromString(property);
+    NSAssert(
+        [options respondsToSelector:selector], @"Options doesn't have a property '%@'", property);
+
+    NSInvocation *invocation = [NSInvocation
+        invocationWithMethodSignature:[[options class]
+                                          instanceMethodSignatureForSelector:selector]];
+    [invocation setSelector:selector];
+    [invocation setTarget:options];
+    [invocation invoke];
+    BOOL result;
+    [invocation getReturnValue:&result];
+
+    return result;
+}
+
+- (NSArray<NSString *> *)getDefaultInAppIncludes
+{
+    NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
+    NSString *bundleExecutable = infoDict[@"CFBundleExecutable"];
+    NSArray<NSString *> *result;
+    if (nil == bundleExecutable) {
+        result = @[];
+    } else {
+        result = @[ bundleExecutable ];
+    }
+    return result;
 }
 
 @end

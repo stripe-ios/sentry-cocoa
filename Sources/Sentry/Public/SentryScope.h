@@ -1,12 +1,27 @@
 #import "SentryDefines.h"
 #import "SentrySerializable.h"
+#import "SentrySpanProtocol.h"
 
 @class SentryUser, SentrySession, SentryOptions, SentryBreadcrumb, SentryAttachment;
 
 NS_ASSUME_NONNULL_BEGIN
 
+/**
+ * The scope holds useful information that should be sent along with the event. For instance tags or
+ * breadcrumbs are stored on the scope.
+ *
+ * For more information see:
+ * https://docs.sentry.io/platforms/apple/enriching-events/scopes/#whats-a-scope-whats-a-hub
+ */
 NS_SWIFT_NAME(Scope)
 @interface SentryScope : NSObject <SentrySerializable>
+
+/**
+ * Returns current Span or Transaction.
+ *
+ * @return current Span or Transaction or null if transaction has not been set.
+ */
+@property (nullable, nonatomic, strong) id<SentrySpan> span;
 
 - (instancetype)initWithMaxBreadcrumbs:(NSInteger)maxBreadcrumbs NS_DESIGNATED_INITIALIZER;
 - (instancetype)init;
@@ -73,7 +88,10 @@ NS_SWIFT_NAME(Scope)
 /**
  * Add a breadcrumb to the scope
  */
-- (void)addBreadcrumb:(SentryBreadcrumb *)crumb;
+- (void)addBreadcrumb:(SentryBreadcrumb *)crumb NS_SWIFT_NAME(addBreadcrumb(_:));
+
+- (void)add:(SentryBreadcrumb *)crumb DEPRECATED_MSG_ATTRIBUTE("use `addBreadcrumb` instead")
+                NS_SWIFT_NAME(add(_:));
 
 /**
  * Clears all breadcrumbs in the scope
@@ -86,16 +104,8 @@ NS_SWIFT_NAME(Scope)
 - (NSDictionary<NSString *, id> *)serialize;
 
 /**
- * Adds the Scope to the event
- */
-- (SentryEvent *__nullable)applyToEvent:(SentryEvent *)event
-                          maxBreadcrumb:(NSUInteger)maxBreadcrumbs;
-
-- (void)applyToSession:(SentrySession *)session;
-
-/**
  * Sets context values which will overwrite SentryEvent.context when event is
- * "enrichted" with scope before sending event.
+ * "enriched" with scope before sending event.
  */
 - (void)setContextValue:(NSDictionary<NSString *, id> *)value
                  forKey:(NSString *)key NS_SWIFT_NAME(setContext(value:key:));
@@ -111,12 +121,29 @@ NS_SWIFT_NAME(Scope)
  *
  * @param attachment The attachment to add to the Scope's list of attachments.
  */
-- (void)addAttachment:(SentryAttachment *)attachment;
+- (void)addAttachment:(SentryAttachment *)attachment NS_SWIFT_NAME(addAttachment(_:));
+
+// We want to keep the old Swift `add(_ attachment:)` function as deprecated, but we cant have
+// another objc `add` method
+- (void)includeAttachment:(SentryAttachment *)attachment
+    DEPRECATED_MSG_ATTRIBUTE("use `addAttachment` instead")NS_SWIFT_NAME(add(_:));
+
+/**
+ * Clears all attachments in the scope.
+ */
+- (void)clearAttachments;
 
 /**
  * Clears the current Scope
  */
 - (void)clear;
+
+/**
+ * Mutates the current transaction atomically.
+ *
+ * @param callback the SentrySpanCallback.
+ */
+- (void)useSpan:(SentrySpanCallback)callback;
 
 @end
 

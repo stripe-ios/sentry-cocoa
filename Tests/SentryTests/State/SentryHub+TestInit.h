@@ -3,11 +3,13 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /** Expose the internal test init for testing. */
-@interface SentryHub (TestInit)
+@interface
+SentryHub (TestInit)
 
 - (instancetype)initWithClient:(SentryClient *_Nullable)client
                       andScope:(SentryScope *_Nullable)scope
-               andCrashAdapter:(SentryCrashAdapter *)crashAdapter;
+               andCrashWrapper:(SentryCrashWrapper *)crashAdapter
+        andCurrentDateProvider:(id<SentryCurrentDateProvider>)currentDateProvider;
 
 @end
 

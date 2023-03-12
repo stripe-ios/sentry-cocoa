@@ -18,11 +18,18 @@
 #    define SENTRY_HAS_UIKIT 0
 #endif
 
+#if TARGET_OS_IOS || TARGET_OS_OSX || TARGET_OS_MACCATALYST
+#    define SENTRY_HAS_METRIC_KIT 1
+#else
+#    define SENTRY_HAS_METRIC_KIT 0
+#endif
+
 #define SENTRY_NO_INIT                                                                             \
     -(instancetype)init NS_UNAVAILABLE;                                                            \
     +(instancetype) new NS_UNAVAILABLE;
 
-@class SentryEvent, SentryBreadcrumb;
+@class SentryEvent, SentryBreadcrumb, SentrySamplingContext;
+@protocol SentrySpan;
 
 /**
  * Block used for returning after a request finished
@@ -31,7 +38,7 @@ typedef void (^SentryRequestFinished)(NSError *_Nullable error);
 
 /**
  * Block used for request operation finished, shouldDiscardEvent is YES if event
- * should be deleted regardless if an error ocured or not
+ * should be deleted regardless if an error occurred or not
  */
 typedef void (^SentryRequestOperationFinished)(
     NSHTTPURLResponse *_Nullable response, NSError *_Nullable error);
@@ -56,11 +63,39 @@ typedef void (^SentryOnCrashedLastRunCallback)(SentryEvent *_Nonnull event);
 /**
  * Block can be used to determine if an event should be queued and stored
  * locally. It will be tried to send again after next successful send. Note that
- * this will only be called once the event is created and send manully. Once it
+ * this will only be called once the event is created and send manually. Once it
  * has been queued once it will be discarded if it fails again.
  */
 typedef BOOL (^SentryShouldQueueEvent)(
     NSHTTPURLResponse *_Nullable response, NSError *_Nullable error);
+
+/**
+ * Function pointer for a sampler callback.
+ *
+ * @param samplingContext context of the sampling.
+ *
+ * @return A sample rate that is >= 0.0 and <= 1.0 or NIL if no sampling decision has been taken..
+ * When returning a value out of range the SDK uses the default of 0.
+ */
+typedef NSNumber *_Nullable (^SentryTracesSamplerCallback)(
+    SentrySamplingContext *_Nonnull samplingContext);
+
+/**
+ * Function pointer for span manipulation.
+ *
+ * @param span The span to be used.
+ */
+typedef void (^SentrySpanCallback)(id<SentrySpan> _Nullable span);
+
+/**
+ * Loglevel
+ */
+typedef NS_ENUM(NSInteger, SentryLogLevel) {
+    kSentryLogLevelNone = 1,
+    kSentryLogLevelError,
+    kSentryLogLevelDebug,
+    kSentryLogLevelVerbose
+};
 
 /**
  * Sentry level
@@ -79,13 +114,27 @@ typedef NS_ENUM(NSUInteger, SentryLevel) {
 /**
  * Static internal helper to convert enum to string
  */
-static NSString *_Nonnull const SentryLevelNames[] = {
-    @"none",
-    @"debug",
-    @"info",
-    @"warning",
-    @"error",
-    @"fatal",
-};
+static DEPRECATED_MSG_ATTRIBUTE(
+    "Use nameForSentryLevel() instead.") NSString *_Nonnull const SentryLevelNames[]
+    = {
+          @"none",
+          @"debug",
+          @"info",
+          @"warning",
+          @"error",
+          @"fatal",
+      };
 
 static NSUInteger const defaultMaxBreadcrumbs = 100;
+
+/**
+ * Transaction name source
+ */
+typedef NS_ENUM(NSInteger, SentryTransactionNameSource) {
+    kSentryTransactionNameSourceCustom = 0,
+    kSentryTransactionNameSourceUrl,
+    kSentryTransactionNameSourceRoute,
+    kSentryTransactionNameSourceView,
+    kSentryTransactionNameSourceComponent,
+    kSentryTransactionNameSourceTask
+};

@@ -5,7 +5,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@class SentryNSError;
+@class SentryNSError, SentryMechanismMeta;
 
 NS_SWIFT_NAME(Mechanism)
 @interface SentryMechanism : NSObject <SentrySerializable>
@@ -30,15 +30,16 @@ SENTRY_NO_INIT
 @property (nonatomic, strong) NSDictionary<NSString *, id> *_Nullable data;
 
 /**
- * Sentry uses the NSErrors domain and code for grouping. Only domain and code are serialized.
- */
-@property (nonatomic, strong) SentryNSError *_Nullable error;
-
-/**
  * Flag indicating whether the exception has been handled by the user
  * (e.g. via ``try..catch``)
  */
 @property (nonatomic, copy) NSNumber *_Nullable handled;
+
+/**
+ * An optional flag indicating a synthetic exception. For more info visit
+ * https://develop.sentry.dev/sdk/event-payloads/exception/#exception-mechanism.
+ */
+@property (nonatomic, copy, nullable) NSNumber *synthetic;
 
 /**
  * Fully qualified URL to an online help resource, possible
@@ -48,9 +49,9 @@ SENTRY_NO_INIT
 
 /**
  * Information from the operating system or runtime on the exception
- * mechanism
+ * mechanism.
  */
-@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *_Nullable meta;
+@property (nullable, nonatomic, strong) SentryMechanismMeta *meta;
 
 /**
  * Initialize an SentryMechanism with a type

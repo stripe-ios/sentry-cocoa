@@ -9,11 +9,10 @@ class SentryTransportInitializerTests: XCTestCase {
     private var fileManager: SentryFileManager!
     
     override func setUp() {
-        do {
-            fileManager = try SentryFileManager(dsn: SentryTransportInitializerTests.dsn, andCurrentDateProvider: TestCurrentDateProvider())
-        } catch {
-            XCTFail("SentryDsn could not be created")
-        }
+        super.setUp()
+        let options = Options()
+        options.dsn = SentryTransportInitializerTests.dsnAsString
+        fileManager = try! SentryFileManager(options: options, andCurrentDateProvider: TestCurrentDateProvider(), dispatchQueueWrapper: TestSentryDispatchQueueWrapper())
     }
 
     func testDefault() throws {

@@ -1,6 +1,6 @@
 #import <Foundation/Foundation.h>
 
-@class SentryEvent, SentryFrameInAppLogic;
+@class SentryEvent, SentryInAppLogic;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -8,13 +8,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong) NSDictionary *userContext;
 
-- (instancetype)initWithReport:(NSDictionary *)report
-               frameInAppLogic:(SentryFrameInAppLogic *)frameInAppLogic;
+- (instancetype)initWithReport:(NSDictionary *)report inAppLogic:(SentryInAppLogic *)inAppLogic;
 
 /**
  * Converts the report to an SentryEvent.
  *
- * @return The converted event or nil if an error occured during the conversion.
+ * @return The converted event or nil if an error occurred during the conversion.
  */
 - (SentryEvent *_Nullable)convertReportToEvent;
 

@@ -7,13 +7,30 @@
 #import "SentryDebugMeta.h"
 #import "SentryException.h"
 #import "SentryId.h"
+#import "SentryLevelMapper.h"
 #import "SentryMessage.h"
 #import "SentryMeta.h"
+#import "SentryRequest.h"
 #import "SentryStacktrace.h"
 #import "SentryThread.h"
 #import "SentryUser.h"
 
 NS_ASSUME_NONNULL_BEGIN
+
+@interface
+SentryEvent ()
+
+@property (nonatomic) BOOL isCrashEvent;
+
+// We're storing serialized breadcrumbs to disk in JSON, and when we're reading them back (in
+// the case of OOM), we end up with the serialized breadcrumbs again. Instead of turning those
+// dictionaries into proper SentryBreadcrumb instances which then need to be serialized again in
+// SentryEvent, we use this serializedBreadcrumbs property to set the pre-serialized
+// breadcrumbs. It saves a LOT of work - especially turning an NSDictionary into a SentryBreadcrumb
+// is silly when we're just going to do the opposite right after.
+@property (nonatomic, strong) NSArray *serializedBreadcrumbs;
+
+@end
 
 @implementation SentryEvent
 
@@ -29,6 +46,7 @@ NS_ASSUME_NONNULL_BEGIN
         self.eventId = [[SentryId alloc] init];
         self.level = level;
         self.platform = @"cocoa";
+        self.timestamp = [SentryCurrentDate date];
     }
     return self;
 }
@@ -48,13 +66,13 @@ NS_ASSUME_NONNULL_BEGIN
 
     NSMutableDictionary *serializedData = @{
         @"event_id" : self.eventId.sentryIdString,
-        @"timestamp" : [self.timestamp sentry_toIso8601String],
+        @"timestamp" : @(self.timestamp.timeIntervalSince1970),
         @"platform" : @"cocoa",
     }
                                               .mutableCopy;
 
     if (self.level != kSentryLevelNone) {
-        [serializedData setValue:SentryLevelNames[self.level] forKey:@"level"];
+        [serializedData setValue:nameForSentryLevel(self.level) forKey:@"level"];
     }
 
     [self addSimpleProperties:serializedData];
@@ -110,15 +128,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)addSimpleProperties:(NSMutableDictionary *)serializedData
 {
-    [serializedData setValue:self.sdk forKey:@"sdk"];
+    [serializedData setValue:[self.sdk sentry_sanitize] forKey:@"sdk"];
     [serializedData setValue:self.releaseName forKey:@"release"];
     [serializedData setValue:self.dist forKey:@"dist"];
     [serializedData setValue:self.environment forKey:@"environment"];
 
     if (self.transaction) {
         [serializedData setValue:self.transaction forKey:@"transaction"];
-    } else if (self.extra[@"__sentry_transaction"]) {
-        [serializedData setValue:self.extra[@"__sentry_transaction"] forKey:@"transaction"];
     }
 
     [serializedData setValue:self.fingerprint forKey:@"fingerprint"];
@@ -128,9 +144,15 @@ NS_ASSUME_NONNULL_BEGIN
 
     [serializedData setValue:[self.stacktrace serialize] forKey:@"stacktrace"];
 
-    [serializedData setValue:[self serializeBreadcrumbs] forKey:@"breadcrumbs"];
+    NSMutableArray *breadcrumbs = [self serializeBreadcrumbs];
+    if (self.serializedBreadcrumbs.count > 0) {
+        [breadcrumbs addObjectsFromArray:self.serializedBreadcrumbs];
+    }
+    if (breadcrumbs.count > 0) {
+        [serializedData setValue:breadcrumbs forKey:@"breadcrumbs"];
+    }
 
-    [serializedData setValue:self.context forKey:@"contexts"];
+    [serializedData setValue:[self.context sentry_sanitize] forKey:@"contexts"];
 
     if (nil != self.message) {
         [serializedData setValue:[self.message serialize] forKey:@"message"];
@@ -140,24 +162,25 @@ NS_ASSUME_NONNULL_BEGIN
     [serializedData setValue:self.type forKey:@"type"];
     if (nil != self.type && [self.type isEqualToString:@"transaction"]) {
         if (nil != self.startTimestamp) {
-            [serializedData setValue:[self.startTimestamp sentry_toIso8601String]
+            [serializedData setValue:@(self.startTimestamp.timeIntervalSince1970)
                               forKey:@"start_timestamp"];
         } else {
             // start timestamp should never be empty
-            [serializedData setValue:[self.timestamp sentry_toIso8601String]
+            [serializedData setValue:@(self.timestamp.timeIntervalSince1970)
                               forKey:@"start_timestamp"];
         }
     }
+
+    if (nil != self.request) {
+        [serializedData setValue:[self.request serialize] forKey:@"request"];
+    }
 }
 
-- (NSArray *_Nullable)serializeBreadcrumbs
+- (NSMutableArray *)serializeBreadcrumbs
 {
     NSMutableArray *crumbs = [NSMutableArray new];
     for (SentryBreadcrumb *crumb in self.breadcrumbs) {
         [crumbs addObject:[crumb serialize]];
-    }
-    if (crumbs.count <= 0) {
-        return nil;
     }
     return crumbs;
 }

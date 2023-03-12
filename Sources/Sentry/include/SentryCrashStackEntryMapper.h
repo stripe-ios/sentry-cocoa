@@ -3,14 +3,14 @@
 #import "SentryDefines.h"
 #import <Foundation/Foundation.h>
 
-@class SentryFrame, SentryFrameInAppLogic;
+@class SentryFrame, SentryInAppLogic;
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface SentryCrashStackEntryMapper : NSObject
 SENTRY_NO_INIT
 
-- (instancetype)initWithFrameInAppLogic:(SentryFrameInAppLogic *)frameInAppLogic;
+- (instancetype)initWithInAppLogic:(SentryInAppLogic *)inAppLogic;
 
 /**
  * Maps the stackEntry of a SentryCrashStackCursor to SentryFrame.
@@ -19,6 +19,13 @@ SENTRY_NO_INIT
  * sentrycrashsc_initSelfThread.
  */
 - (SentryFrame *)mapStackEntryWithCursor:(SentryCrashStackCursor)stackCursor;
+
+/**
+ * Maps a SentryCrashStackEntry to SentryFrame.
+ *
+ * @param stackEntry A stack entry retrieved from a thread.
+ */
+- (SentryFrame *)sentryCrashStackEntryToSentryFrame:(SentryCrashStackEntry)stackEntry;
 
 @end
 

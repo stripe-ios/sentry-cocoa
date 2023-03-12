@@ -19,7 +19,18 @@ SentrySwizzleInfo ()
 
 - (SentrySwizzleOriginalIMP)getOriginalImplementation
 {
-    NSAssert(_impProviderBlock, nil);
+    NSAssert(_impProviderBlock, @"_impProviderBlock can't be missing");
+    if (!_impProviderBlock) {
+        NSLog(@"_impProviderBlock can't be missing");
+        return NULL;
+    }
+
+#if TEST
+    @synchronized(self) {
+        self.originalCalled = true;
+    }
+#endif
+
     // Casting IMP to SentrySwizzleOriginalIMP to force user casting.
     return (SentrySwizzleOriginalIMP)_impProviderBlock();
 }
@@ -100,7 +111,7 @@ swizzle(Class classToSwizzle, SEL selector, SentrySwizzleImpFactoryBlock factory
     pthread_mutex_unlock(&gLock);
 }
 
-static NSMutableDictionary *
+static NSMutableDictionary<NSValue *, NSMutableSet<Class> *> *
 swizzledClassesDictionary()
 {
     static NSMutableDictionary *swizzledClasses;
@@ -109,10 +120,11 @@ swizzledClassesDictionary()
     return swizzledClasses;
 }
 
-static NSMutableSet *
+static NSMutableSet<Class> *
 swizzledClassesForKey(const void *key)
 {
-    NSMutableDictionary *classesDictionary = swizzledClassesDictionary();
+    NSMutableDictionary<NSValue *, NSMutableSet<Class> *> *classesDictionary
+        = swizzledClassesDictionary();
     NSValue *keyValue = [NSValue valueWithPointer:key];
     NSMutableSet *swizzledClasses = [classesDictionary objectForKey:keyValue];
     if (!swizzledClasses) {
@@ -123,17 +135,22 @@ swizzledClassesForKey(const void *key)
 }
 
 + (BOOL)swizzleInstanceMethod:(SEL)selector
-                      inClass:(Class)classToSwizzle
+                      inClass:(nonnull Class)classToSwizzle
                 newImpFactory:(SentrySwizzleImpFactoryBlock)factoryBlock
                          mode:(SentrySwizzleMode)mode
                           key:(const void *)key
 {
-    NSAssert(!(NULL == key && SentrySwizzleModeAlways != mode),
+    NSAssert(!(key == NULL && mode != SentrySwizzleModeAlways),
         @"Key may not be NULL if mode is not SentrySwizzleModeAlways.");
+
+    if (key == NULL && mode != SentrySwizzleModeAlways) {
+        NSLog(@"Key may not be NULL if mode is not SentrySwizzleModeAlways.");
+        return NO;
+    }
 
     @synchronized(swizzledClassesDictionary()) {
         if (key) {
-            NSSet *swizzledClasses = swizzledClassesForKey(key);
+            NSSet<Class> *swizzledClasses = swizzledClassesForKey(key);
             if (mode == SentrySwizzleModeOncePerClass) {
                 if ([swizzledClasses containsObject:classToSwizzle]) {
                     return NO;

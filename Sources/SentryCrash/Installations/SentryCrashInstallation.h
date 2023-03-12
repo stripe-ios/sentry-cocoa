@@ -26,7 +26,6 @@
 
 #import "SentryCrashReportFilter.h"
 #import "SentryCrashReportWriter.h"
-#import <Foundation/Foundation.h>
 
 /**
  * Crash system installation which handles backend-specific details.
@@ -47,8 +46,14 @@
 
 /** Install this installation. Call this instead of -[SentryCrash install] to
  * install with everything needed for your particular backend.
+ * If you wish to use default cache directory, pass null
  */
-- (void)install;
+- (void)install:(NSString *)customCacheDirectory;
+
+/**
+ * Call this instead of `-[SentryCrash uninstall]`.
+ */
+- (void)uninstall;
 
 /** Convenience method to call -[SentryCrash sendAllReportsWithCompletion:].
  * This method will set the SentryCrash sink and then send all outstanding

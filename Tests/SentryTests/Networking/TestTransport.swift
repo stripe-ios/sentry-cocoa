@@ -3,24 +3,19 @@ import Foundation
 @objc
 public class TestTransport: NSObject, Transport {
     
-    var lastSentEnvelope: SentryEnvelope?
-    
-    var sentEvents: [(event: Event, attachments: [Attachment])] = []
-    public func send(event: Event, attachments: [Attachment]) {
-        sentEvents.append((event, attachments))
-    }
-    
-    var sentEventsWithSession: [(event: Event, session: SentrySession, attachments: [Attachment])] = []
-    public func send(_ event: Event, with session: SentrySession, attachments: [Attachment]) {
-        sentEventsWithSession.append((event, session, attachments))
-    }
-    
-    var sentUserFeedback: [UserFeedback] = []
-    public func send(userFeedback: UserFeedback) {
-        sentUserFeedback.append(userFeedback)
-    }
-    
+    var sentEnvelopes = Invocations<SentryEnvelope>()
     public func send(envelope: SentryEnvelope) {
-        lastSentEnvelope = envelope
+        sentEnvelopes.record(envelope)
+    }
+    
+    var recordLostEvents = Invocations<(category: SentryDataCategory, reason: SentryDiscardReason)>()
+    public func recordLostEvent(_ category: SentryDataCategory, reason: SentryDiscardReason) {
+        recordLostEvents.record((category, reason))
+    }
+    
+    var flushInvocations = Invocations<TimeInterval>()
+    public func flush(_ timeout: TimeInterval) -> Bool {
+        flushInvocations.record(timeout)
+        return true
     }
 }

@@ -1,4 +1,5 @@
 #import "SentryBreadcrumb.h"
+#import "SentryOptions+Private.h"
 #import "SentryScope+Private.h"
 #import "SentryScope.h"
 #import "SentryUser.h"
@@ -29,15 +30,11 @@
     [scope setExtraValue:@2 forKey:@"B"];
     [scope setExtraValue:@3 forKey:@"C"];
 
-    __block BOOL wasListenerCalled = false;
-    [scope addScopeListener:^(
-        SentryScope *_Nonnull __attribute__((unused)) scope) { wasListenerCalled = true; }];
     [scope removeExtraForKey:@"A"];
     [scope setExtraValue:nil forKey:@"C"];
 
     NSDictionary<NSString *, NSString *> *actual = scope.serialize[@"extra"];
     XCTAssertTrue([@{ @"B" : @2 } isEqualToDictionary:actual]);
-    XCTAssertTrue(wasListenerCalled);
 }
 
 - (void)testBreadcrumbOlderReplacedByNewer
@@ -96,14 +93,10 @@
     [scope setTagValue:@"1" forKey:@"A"];
     [scope setTagValue:@"2" forKey:@"B"];
 
-    __block BOOL wasListenerCalled = false;
-    [scope addScopeListener:^(
-        SentryScope *_Nonnull __attribute__((unused)) scope) { wasListenerCalled = true; }];
     [scope removeTagForKey:@"A"];
 
     NSDictionary<NSString *, NSString *> *actual = scope.serialize[@"tags"];
     XCTAssertTrue([@{ @"B" : @"2" } isEqualToDictionary:actual]);
-    XCTAssertTrue(wasListenerCalled);
 }
 
 - (void)testSetUser
@@ -138,15 +131,11 @@
     [scope setContextValue:@{ @"AA" : @1 } forKey:@"A"];
     [scope setContextValue:@{ @"BB" : @"2" } forKey:@"B"];
 
-    __block BOOL wasListenerCalled = false;
-    [scope addScopeListener:^(
-        SentryScope *_Nonnull __attribute__((unused)) scope) { wasListenerCalled = true; }];
     [scope removeContextForKey:@"B"];
 
     NSDictionary *actual = scope.serialize[@"context"];
     NSDictionary *expected = @{ @"A" : @ { @"AA" : @1 } };
     XCTAssertTrue([expected isEqualToDictionary:actual]);
-    XCTAssertTrue(wasListenerCalled);
 }
 
 - (void)testDistSerializes
@@ -160,7 +149,7 @@
 - (void)testEnvironmentSerializes
 {
     SentryScope *scope = [[SentryScope alloc] init];
-    NSString *expectedEnvironment = @"production";
+    NSString *expectedEnvironment = kSentryDefaultEnvironment;
     [scope setEnvironment:expectedEnvironment];
     XCTAssertEqualObjects([[scope serialize] objectForKey:@"environment"], expectedEnvironment);
 }
@@ -172,19 +161,6 @@
     [scope addBreadcrumb:[self getBreadcrumb]];
     [scope clearBreadcrumbs];
     XCTAssertTrue([[[scope serialize] objectForKey:@"breadcrumbs"] count] == 0);
-}
-
-- (void)testListeners
-{
-    XCTestExpectation *expectation =
-        [self expectationWithDescription:@"Should call scope listener"];
-    SentryScope *scope = [[SentryScope alloc] init];
-    [scope addScopeListener:^(SentryScope *_Nonnull scope) {
-        XCTAssertEqualObjects([[scope serialize] objectForKey:@"extra"], @ { @"a" : @"b" });
-        [expectation fulfill];
-    }];
-    [scope setExtras:@{ @"a" : @"b" }];
-    [self waitForExpectations:@[ expectation ] timeout:5.0];
 }
 
 - (void)testInitWithScope

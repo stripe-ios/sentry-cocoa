@@ -3,14 +3,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/**
- * Used to make properties visible for testing.
- */
-@interface SentryFileManager (TestProperties)
+@interface
+SentryFileManager ()
 
 @property (nonatomic, copy) NSString *eventsPath;
-
 @property (nonatomic, copy) NSString *envelopesPath;
+@property (nonatomic, copy) NSString *timezoneOffsetFilePath;
 
 @end
 

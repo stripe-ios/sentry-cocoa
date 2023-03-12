@@ -6,10 +6,24 @@ struct ContentView: View {
         let crumb = Breadcrumb(level: SentryLevel.info, category: "Debug")
         crumb.message = "tapped addBreadcrumb"
         crumb.type = "user"
-        SentrySDK.addBreadcrumb(crumb: crumb)
+        SentrySDK.addBreadcrumb(crumb)
     }
     
     var captureMessageAction: () -> Void = {
+        func delayNonBlocking(timeout: Double = 0.2) {
+            let group = DispatchGroup()
+            group.enter()
+            let queue = DispatchQueue(label: "delay", qos: .background, attributes: [])
+            
+            queue.asyncAfter(deadline: .now() + timeout) {
+                group.leave()
+            }
+            
+            group.wait()
+        }
+        
+        delayNonBlocking(timeout: 5)
+        
         SentrySDK.capture(message: "Yeah captured a message")
     }
     
@@ -41,6 +55,57 @@ struct ContentView: View {
         SentrySDK.capture(exception: exception, scope: scope)
     }
     
+    var captureTransactionAction: () -> Void = {
+        let dispatchQueue = DispatchQueue(label: "ContentView")
+        
+        let transaction = SentrySDK.startTransaction(name: "Some Transaction", operation: "some operation", bindToScope: true)
+        
+        guard let imgUrl = URL(string: "https://sentry-brand.storage.googleapis.com/sentry-logo-black.png") else {
+            return
+        }
+        let session = URLSession(configuration: URLSessionConfiguration.default)
+        let dataTask = session.dataTask(with: imgUrl) { (_, _, _) in }
+        dataTask.resume()
+        
+        dispatchQueue.async {
+            if let path = Bundle.main.path(forResource: "Tongariro", ofType: "jpg") {
+                _ = FileManager.default.contents(atPath: path)
+            }
+        }
+        
+        dispatchQueue.asyncAfter(deadline: .now() + Double.random(in: 0.4...0.6), execute: {
+            transaction.finish()
+        })
+    }
+
+    func asyncCrash1() {
+        DispatchQueue.main.async {
+            self.asyncCrash2()
+        }
+    }
+
+    func asyncCrash2() {
+        DispatchQueue.main.async {
+            SentrySDK.crash()
+        }
+    }
+
+    var oomCrashAction: () -> Void = {
+        DispatchQueue.main.async {
+            let megaByte = 1_024 * 1_024
+            let memoryPageSize = NSPageSize()
+            let memoryPages = megaByte / memoryPageSize
+
+            while true {
+                // Allocate one MB and set one element of each memory page to something.
+                let ptr = UnsafeMutablePointer<Int8>.allocate(capacity: megaByte)
+                for i in 0..<memoryPages {
+                    ptr[i * memoryPageSize] = 40
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             Button(action: addBreadcrumbAction) {
@@ -50,6 +115,7 @@ struct ContentView: View {
             Button(action: captureMessageAction) {
                 Text("Capture Message")
             }
+            .accessibility(identifier: "captureMessageButton")
             
             Button(action: captureUserFeedbackAction) {
                 Text("Capture User Feedback")
@@ -63,14 +129,28 @@ struct ContentView: View {
                 Text("Capture NSException")
             }
             
+            Button(action: captureTransactionAction) {
+                Text("Capture Transaction")
+            }
+
             Button(action: {
                 SentrySDK.crash()
             }) {
                 Text("Crash")
             }
             
+            Button(action: {
+                DispatchQueue.main.async {
+                    self.asyncCrash1()
+                }
+            }) {
+                Text("Async Crash")
+            }
+
+            Button(action: oomCrashAction) {
+                Text("OOM Crash")
+            }
         }
-        
     }
 }
 
